@@ -3,7 +3,7 @@
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
   <!ENTITY version   "0.1.1">
-  <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager-0.1.1.plg">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;"
         author="&author;"
