@@ -1,0 +1,893 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "kossmann-festeip-manager">
+  <!ENTITY author    "ezek1el3000">
+  <!ENTITY version   "0.1.0">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip.plg">
+]>
+<PLUGIN name="&name;"
+        author="&author;"
+        version="&version;"
+        pluginURL="&pluginURL;"
+        min="6.12"
+        support="https://forums.unraid.net/">
+
+<CHANGES>
+##0.1.0
+- Initiales Release
+- Alle Feste IPs auflisten (DG-Gateway + OpenVPN)
+- IP-Details, Reverse-DNS setzen
+- Traffic-Graph (1/7/30 Tage) und Traffic-Tabelle (30 Tage)
+- TCP-Port-Scanner mit Schnellzugriff
+- DG-WAN-IP aktualisieren
+- Zugangsdaten sicher in /boot/config gespeichert
+- Fix: ob_start/try-catch im API-Handler
+- Fix: php://input Fallback wenn nginx $_POST nicht befüllt
+- Fix: save_config akzeptiert GET und POST
+</CHANGES>
+
+<!--
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.0         ║
+  ╚══════════════════════════════════════════════════════════════╝
+-->
+
+<!-- ── 1. Haupt-PHP-Applikation (API-Proxy + Web-UI) ── -->
+<FILE Name="/usr/local/emhttp/plugins/&name;/KossmannFesteIP.php">
+<INLINE>
+<![CDATA[
+<?php
+// ══════════════════════════════════════════════════════════════════════════════
+//  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v1.0
+//  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
+// ══════════════════════════════════════════════════════════════════════════════
+
+const KFIP_VER        = '0.1.0';
+const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
+const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
+
+function kfip_load(): array {
+    if (!file_exists(KFIP_CONFIG)) return [];
+    return json_decode(file_get_contents(KFIP_CONFIG), true) ?? [];
+}
+
+/**
+ * POST-Wert lesen – unterstützt $_POST und php://input (nginx/PHP-FPM-Fallback).
+ * Unraid's nginx leitet den Request-Body manchmal nicht in $_POST weiter.
+ */
+function kfip_post(string $key, string $default = ''): string {
+    if (isset($_POST[$key]) && $_POST[$key] !== '') {
+        return trim((string) $_POST[$key]);
+    }
+    static $raw = null;
+    if ($raw === null) {
+        $raw = [];
+        $input = file_get_contents('php://input') ?: '';
+        if ($input !== '') parse_str($input, $raw);
+    }
+    return isset($raw[$key]) ? trim((string) $raw[$key]) : $default;
+}
+
+function kfip_save(array $data): bool {
+    if (!is_dir(KFIP_CONFIG_DIR)) {
+        if (!@mkdir(KFIP_CONFIG_DIR, 0755, true) && !is_dir(KFIP_CONFIG_DIR)) return false;
+    }
+    return file_put_contents(KFIP_CONFIG, json_encode($data, JSON_PRETTY_PRINT)) !== false;
+}
+
+// ── API-PROXY ─────────────────────────────────────────────────────────────────
+if (isset($_GET['api'])) {
+    // ob_start: fängt PHP-Warnings/Notices ab, die sonst den JSON-Output korrumpieren
+    ob_start();
+    header('Content-Type: application/json; charset=utf-8');
+
+    try {
+
+    // Zugangsdaten speichern  (GET oder POST – beide Wege werden akzeptiert)
+    $op = $_GET['_op'] ?? kfip_post('_op');
+    if (in_array($op, ['save_config'], true)) {
+        $cid = $_GET['customer_id'] ?? kfip_post('customer_id');
+        $pwd = $_GET['password']    ?? kfip_post('password');
+        $cid = trim($cid); $pwd = trim($pwd);
+        if ($cid === '' || $pwd === '') {
+            ob_end_clean();
+            echo json_encode(['error' => true, 'message' => 'Kunden-ID und Passwort sind erforderlich.']);
+            exit;
+        }
+        $saved = kfip_save(['customer_id' => $cid, 'password' => $pwd]);
+        ob_end_clean();
+        if ($saved) {
+            echo json_encode(['ok' => true, 'message' => 'Zugangsdaten gespeichert.']);
+        } else {
+            echo json_encode(['error' => true, 'message' => 'Schreiben nach /boot/config fehlgeschlagen – Berechtigungen prüfen.']);
+        }
+        exit;
+    }
+
+    $cfg = kfip_load();
+    $cid = $cfg['customer_id'] ?? '';
+    $pwd = $cfg['password']    ?? '';
+
+    if (!$cid || !$pwd) {
+        ob_end_clean();
+        http_response_code(401);
+        echo json_encode(['error' => true, 'message' => 'Keine Zugangsdaten konfiguriert.']);
+        exit;
+    }
+
+    $action = preg_replace('/[^a-z_]/', '', $_GET['action'] ?? '');
+    $id     = isset($_GET['id'])     ? (int) $_GET['id']     : null;
+    $period = isset($_GET['period']) ? (int) $_GET['period'] : 7;
+
+    $allowed = ['list', 'details', 'traffic_graph', 'traffic_table', 'rdns_manage', 'portscan'];
+    if (!in_array($action, $allowed, true)) {
+        ob_end_clean();
+        http_response_code(400);
+        echo json_encode(['error' => true, 'message' => "Unbekannte Aktion: {$action}"]);
+        exit;
+    }
+
+    $url = "https://kossmann.center/api/?module=festeip&action={$action}";
+    if ($id !== null)                  $url .= "&id={$id}";
+    if ($action === 'traffic_graph')   $url .= "&period={$period}";
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_USERPWD        => "{$cid}:{$pwd}",
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_USERAGENT      => 'Unraid-KossmannFesteIP/' . KFIP_VER,
+        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+    ]);
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($action === 'rdns_manage') {
+            $body = 'rdns=' . urlencode(kfip_post('rdns'));
+        } elseif ($action === 'portscan') {
+            $body = 'port=' . (int) kfip_post('port', '0');
+        } else {
+            $body = '';
+        }
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+    }
+
+    $response = curl_exec($ch);
+    $curlErr  = curl_error($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    ob_end_clean();
+    if ($curlErr) {
+        http_response_code(502);
+        echo json_encode(['error' => true, 'message' => "cURL-Fehler: {$curlErr}"]);
+    } elseif ($httpCode >= 400) {
+        http_response_code($httpCode);
+        echo json_encode(['error' => true, 'message' => "API HTTP {$httpCode}"]);
+    } else {
+        echo $response;
+    }
+
+    } catch (Throwable $e) {
+        // Letzter Fallback: immer valides JSON zurückgeben
+        if (ob_get_level()) ob_end_clean();
+        http_response_code(500);
+        echo json_encode(['error' => true, 'message' => 'PHP-Ausnahme: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── PAGE ──────────────────────────────────────────────────────────────────────
+$cfg        = kfip_load();
+$configured = !empty($cfg['customer_id']) && !empty($cfg['password']);
+$customerId = htmlspecialchars($cfg['customer_id'] ?? '');
+$selfUrl    = htmlspecialchars($_SERVER['PHP_SELF']);
+?><!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Kossmann · Feste IP</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#06090f;--bg2:#0c1219;--bg3:#111820;
+  --bd:#1c2a3a;--cy:#00d4ff;--cyd:#00d4ff12;
+  --or:#ff7040;--ord:#ff704014;
+  --gn:#00e89a;--rd:#ff3f60;
+  --tx:#b8ccd8;--dm:#4a6070;--dmr:#2a3848;
+}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'Space Mono',monospace;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
+
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:var(--bg2);border-bottom:1px solid var(--bd);flex-shrink:0;position:relative;}
+.hdr::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cy),var(--or),transparent);}
+.logo-box{width:34px;height:34px;border:1.5px solid var(--cy);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--cy);font-size:17px;box-shadow:0 0 16px var(--cyd);}
+.logo-t{font-size:12px;font-weight:700;letter-spacing:.14em;color:var(--cy);}
+.logo-s{font-size:9px;color:var(--dm);letter-spacing:.2em;}
+
+.main{display:grid;grid-template-columns:260px 1fr;flex:1;overflow:hidden;min-height:0;}
+
+.sb{background:var(--bg2);border-right:1px solid var(--bd);overflow-y:auto;padding:10px 6px;}
+.sb-hd{padding:6px 10px 10px;font-size:9px;letter-spacing:.22em;color:var(--dmr);text-transform:uppercase;}
+.ipc{padding:9px 10px;border-radius:5px;cursor:pointer;border:1px solid transparent;margin-bottom:3px;transition:all .12s;}
+.ipc:hover{background:#00d4ff06;}
+.ipc.active{background:var(--cyd);border-color:#00d4ff44;box-shadow:0 0 14px var(--cyd);}
+.ipc .ip-a{font-size:13px;font-weight:700;letter-spacing:.04em;color:white;}
+.ipc.active .ip-a{color:var(--cy);}
+.ip-lb{font-size:11px;color:var(--dm);padding-left:13px;}
+.ip-rd{font-size:10px;color:var(--dmr);padding-left:13px;margin-top:2px;}
+
+.badge{font-size:9px;padding:2px 6px;border-radius:3px;letter-spacing:.12em;text-transform:uppercase;border:1px solid;margin-left:auto;}
+.badge.dg{background:var(--cyd);color:var(--cy);border-color:#00d4ff44;}
+.badge.ov{background:var(--ord);color:var(--or);border-color:#ff704044;}
+
+.dot{width:6px;height:6px;border-radius:50%;background:var(--gn);box-shadow:0 0 5px var(--gn);display:inline-block;flex-shrink:0;animation:dp 2s infinite;}
+@keyframes dp{0%,100%{opacity:1}50%{opacity:.3}}
+
+.ca{display:flex;flex-direction:column;overflow:hidden;background:var(--bg);min-height:0;}
+.chd{padding:14px 18px 0;border-bottom:1px solid var(--bd);flex-shrink:0;}
+.cbd{flex:1;overflow-y:auto;padding:16px 18px;min-height:0;}
+
+.tabs{display:flex;}
+.tab{padding:7px 14px;font-size:10px;letter-spacing:.1em;color:var(--dm);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit;text-transform:uppercase;transition:all .1s;}
+.tab.active{color:var(--cy);border-bottom-color:var(--cy);}
+
+.igrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:7px;overflow:hidden;margin-bottom:16px;}
+.icell{background:var(--bg2);padding:12px 14px;}
+.ilbl{font-size:9px;letter-spacing:.18em;color:var(--dmr);text-transform:uppercase;margin-bottom:3px;}
+.ival{font-size:13px;font-weight:700;word-break:break-all;}
+
+.sec{background:var(--bg2);border:1px solid var(--bd);border-radius:7px;margin-bottom:14px;overflow:hidden;}
+.sechd{padding:10px 16px;border-bottom:1px solid var(--bd);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dm);display:flex;align-items:center;justify-content:space-between;}
+.secb{padding:14px 16px;}
+
+.kfi{background:var(--bg3);border:1px solid var(--bd);border-radius:4px;padding:7px 11px;color:var(--tx);font-size:12px;outline:none;font-family:inherit;transition:border-color .15s;}
+.kfi:focus{border-color:var(--cy);}
+
+.btn{padding:7px 14px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-family:inherit;transition:all .12s;}
+.btn-c{border:1px solid #00d4ff55;background:var(--cyd);color:var(--cy);}
+.btn-c:hover{background:#00d4ff22;}
+.btn-c:disabled{opacity:.5;cursor:default;}
+.btn-o{border:1px solid #ff704055;background:var(--ord);color:var(--or);}
+.btn-o:hover{background:#ff704028;}
+.btn-o:disabled{opacity:.5;cursor:default;}
+.btn-g{padding:4px 9px;font-size:12px;border:1px solid var(--bd);background:transparent;color:var(--dm);}
+.btn-g:hover{background:var(--bg3);}
+
+.perbtn{padding:5px 12px;border-radius:4px;font-size:10px;cursor:pointer;font-family:inherit;letter-spacing:.08em;border:1px solid var(--bd);background:transparent;color:var(--dm);transition:all .12s;}
+.perbtn.active{border-color:#00d4ff55;background:var(--cyd);color:var(--cy);}
+
+.pq{padding:4px 9px;border-radius:3px;font-size:11px;font-family:inherit;cursor:pointer;border:1px solid var(--bd);background:transparent;color:var(--dm);transition:all .1s;}
+.pq:hover{opacity:.8;}
+.pq.active{border-color:#00d4ff44;background:var(--cyd);color:var(--cy);}
+
+.msg{padding:8px 12px;border-radius:4px;font-size:12px;display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.msg-ok{background:#00e89a10;border:1px solid #00e89a30;color:var(--gn);}
+.msg-err{background:#ff3f6010;border:1px solid #ff3f6030;color:var(--rd);}
+.msg-inf{background:var(--cyd);border:1px solid #00d4ff30;color:var(--cy);}
+
+.ktbl{width:100%;border-collapse:collapse;font-size:12px;}
+.ktbl th{padding:8px 12px;text-align:left;color:var(--dmr);font-size:9px;letter-spacing:.12em;text-transform:uppercase;border-bottom:1px solid var(--bd);font-weight:700;background:var(--bg2);white-space:nowrap;}
+.ktbl td{padding:5px 12px;border-bottom:1px solid #1c2a3a22;}
+.ktbl tr:hover td{background:#0c121966;}
+.tbar{height:5px;min-width:2px;background:linear-gradient(90deg,var(--cy),#00d4ff44);border-radius:2px;}
+
+.gfx-img{width:100%;border-radius:4px;display:block;}
+.gfx-ph{height:160px;display:flex;align-items:center;justify-content:center;background:var(--bg3);border-radius:4px;color:var(--dmr);font-size:11px;border:1px dashed var(--bd);gap:8px;}
+
+.ov-bg{display:none;position:fixed;inset:0;background:#00000090;z-index:999;align-items:center;justify-content:center;}
+.ov-box{background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:24px;width:100%;max-width:420px;}
+
+.spin{width:14px;height:14px;border:2px solid var(--bd);border-top-color:var(--cy);border-radius:50%;animation:sp .7s linear infinite;display:inline-block;vertical-align:middle;}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+.fl{display:flex;}.fla{align-items:center;}.flg8{gap:8px;}.flg12{gap:12px;}
+.mb10{margin-bottom:10px;}.mb14{margin-bottom:14px;}.mb16{margin-bottom:16px;}
+.ctr{display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:10px;color:var(--dmr);}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="fl fla flg12">
+    <div class="logo-box">⬡</div>
+    <div>
+      <div class="logo-t">KOSSMANN EDV</div>
+      <div class="logo-s">FESTE IP · MANAGEMENT · v<?= KFIP_VER ?></div>
+    </div>
+  </div>
+  <div class="fl fla flg8">
+    <span id="conn-status" style="font-size:11px;"></span>
+    <button class="btn btn-g" onclick="kfip.reload()" title="Aktualisieren">⟳</button>
+    <button class="btn btn-g" onclick="kfip.showCreds()" title="Zugangsdaten">⚙ Zugangsdaten</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="sb" id="sidebar">
+    <div class="sb-hd" id="ip-count">Feste IPs</div>
+    <div id="ip-list"></div>
+  </div>
+  <div class="ca" id="content-area">
+    <div class="ctr">
+      <div style="font-size:38px">⬡</div>
+      <div id="empty-msg" style="font-size:10px;letter-spacing:.18em;text-transform:uppercase;">Lade...</div>
+    </div>
+  </div>
+</div>
+
+<!-- CREDENTIALS OVERLAY -->
+<div class="ov-bg" id="creds-ov" style="display:none;">
+  <div class="ov-box">
+    <div style="font-size:11px;letter-spacing:.14em;color:var(--cy);text-transform:uppercase;margin-bottom:20px;">
+      ⚙ Zugangsdaten konfigurieren
+    </div>
+    <div class="mb14">
+      <div class="ilbl" style="margin-bottom:5px;">Kunden-ID</div>
+      <input class="kfi" id="inp-cid" type="text" placeholder="z.B. 10000" style="width:100%;" value="<?= $customerId ?>"/>
+    </div>
+    <div class="mb16">
+      <div class="ilbl" style="margin-bottom:5px;">Passwort</div>
+      <input class="kfi" id="inp-pwd" type="password" placeholder="API-Passwort" style="width:100%;"/>
+    </div>
+    <div id="creds-msg" class="mb14"></div>
+    <div class="fl flg8">
+      <button class="btn btn-c" onclick="kfip.saveCredentials()">Speichern</button>
+      <button class="btn btn-g" onclick="kfip.hideCreds()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+//  KOSSMANN FESTE IP · Client-seitiger State-Manager
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const kfip = (() => {
+
+const API  = '<?= $selfUrl ?>';
+const CONF = <?= $configured ? 'true' : 'false' ?>;
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+const S = { configured: CONF, ips:[], sel:null, det:null, tab:'overview', period:'7' };
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s; return d.innerHTML;
+}
+
+function setStatus(state, msg='') {
+  const el = document.getElementById('conn-status');
+  if (state === null) {
+    el.innerHTML = '<span class="spin"></span>';
+  } else if (state) {
+    el.innerHTML = `<span style="display:flex;align-items:center;gap:6px;color:var(--gn)"><span class="dot"></span>Verbunden · Kunde ${esc(msg)}</span>`;
+  } else {
+    el.innerHTML = `<span style="color:var(--rd);font-size:11px;">✗ ${esc(msg||'Fehler')}</span>`;
+  }
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function call(params, post=null) {
+  const url = `${API}?api=1&${new URLSearchParams(params)}`;
+  const opt = {};
+  if (post) {
+    opt.method = 'POST';
+    opt.headers = {'Content-Type':'application/x-www-form-urlencoded'};
+    opt.body = new URLSearchParams(post);
+  }
+  const r = await fetch(url, opt);
+  const text = await r.text();
+  if (!text || !text.trim()) {
+    throw new Error(`Leere Antwort vom Server (HTTP ${r.status}). Prüfe: Unraid → Settings → PHP Error Log.`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    throw new Error(`Keine JSON-Antwort (HTTP ${r.status}): ${text.slice(0, 200)}`);
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+async function init() {
+  if (!S.configured) {
+    setStatus(false, 'Keine Zugangsdaten');
+    document.getElementById('empty-msg').textContent = 'Bitte Zugangsdaten konfigurieren.';
+    showCreds();
+    return;
+  }
+  await loadList();
+}
+
+async function reload() { S.sel=null; S.ips=[]; await loadList(); }
+
+async function loadList() {
+  setStatus(null);
+  try {
+    const res = await call({action:'list'});
+    if (res.error) { setStatus(false, res.message||'API-Fehler'); return; }
+    S.ips = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);
+    const cfg = await call({action:'list'}); // re-use response to get customer id
+    const firstCid = S.ips[0]?.customer_id || '';
+    setStatus(true, firstCid || '–');
+    renderSidebar();
+    if (S.ips.length > 0) selectIP(S.ips[0].id);
+    else document.getElementById('empty-msg').textContent = 'Keine Feste IPs vorhanden.';
+  } catch(e) { setStatus(false, e.message); }
+}
+
+// ── SIDEBAR ───────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  document.getElementById('ip-count').textContent = `Feste IPs · ${S.ips.length}`;
+  document.getElementById('ip-list').innerHTML = S.ips.map(ip => `
+    <div class="ipc${ip.id===S.sel?' active':''}" onclick="kfip.selectIP(${ip.id})">
+      <div class="fl fla flg8 mb10" style="margin-bottom:3px;">
+        <span class="dot"></span>
+        <span class="ip-a">${esc(ip.ip||'')}</span>
+        <span class="badge ${ip.type==='dg'?'dg':'ov'}">${ip.type==='dg'?'DG':'OVPN'}</span>
+      </div>
+      <div class="ip-lb">${esc(ip.label||ip.ip||'')}</div>
+      <div class="ip-rd">${esc(ip.rdns||'')}</div>
+    </div>
+  `).join('');
+}
+
+// ── SELECT IP ─────────────────────────────────────────────────────────────────
+async function selectIP(id) {
+  S.sel=id; S.tab='overview'; S.det=null;
+  renderSidebar();
+  showLoading();
+  try {
+    const res = await call({action:'details', id});
+    if (res.error) { showError(res.message); return; }
+    S.det = res.data || res;
+    renderContent();
+  } catch(e) { showError(e.message); }
+}
+
+function showLoading() {
+  const ip = S.ips.find(x=>x.id===S.sel);
+  document.getElementById('content-area').innerHTML = `
+    <div class="ctr"><span class="spin"></span><span style="font-size:11px;color:var(--dm);">Lade ${esc(ip?.ip||'')}…</span></div>`;
+}
+
+function showError(msg) {
+  document.getElementById('content-area').innerHTML = `
+    <div class="ctr"><div style="font-size:24px;color:var(--rd)">✗</div><div style="font-size:12px;color:var(--rd)">${esc(msg)}</div></div>`;
+}
+
+// ── CONTENT RENDER ────────────────────────────────────────────────────────────
+function renderContent() {
+  const ip = S.ips.find(x=>x.id===S.sel) || {};
+  const d  = S.det || ip;
+  const tp = d.type || ip.type || 'dg';
+
+  document.getElementById('content-area').innerHTML = `
+    <div class="chd">
+      <div class="fl fla flg12 mb16">
+        <span class="dot"></span>
+        <span style="font-size:20px;font-weight:700;color:white;letter-spacing:.04em;">${esc(ip.ip||d.ip||'')}</span>
+        <span class="badge ${tp==='dg'?'dg':'ov'}" style="font-size:10px;padding:3px 8px;">
+          ${tp==='dg'?'DG-Gateway':'OpenVPN'}
+        </span>
+      </div>
+      <div class="tabs">
+        ${[['overview','⊞ Übersicht'],['traffic','◈ Traffic'],['tools','⚙ Tools']].map(([t,l])=>
+          `<button class="tab${S.tab===t?' active':''}" onclick="kfip.setTab('${t}')">${l}</button>`
+        ).join('')}
+      </div>
+    </div>
+    <div class="cbd" id="tab-body"></div>
+  `;
+  renderTab();
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+function setTab(t) {
+  S.tab=t;
+  document.querySelectorAll('.tab').forEach(b=>{
+    const lbl = b.textContent;
+    b.classList.toggle('active',
+      (t==='overview'&&lbl.includes('Übersicht'))||
+      (t==='traffic'&&lbl.includes('Traffic'))||
+      (t==='tools'&&lbl.includes('Tools'))
+    );
+  });
+  renderTab();
+}
+
+function renderTab() {
+  if (S.tab==='overview') renderOverview();
+  else if (S.tab==='traffic') renderTraffic();
+  else renderTools();
+}
+
+// ── ÜBERSICHT ─────────────────────────────────────────────────────────────────
+function renderOverview() {
+  const ip = S.ips.find(x=>x.id===S.sel)||{};
+  const d  = S.det||ip;
+  const tp = d.type||ip.type||'dg';
+
+  const fields = [
+    ['IP-Adresse',  ip.ip||d.ip||'–',                          'white'],
+    ['Typ',         tp==='dg'?'DG-Gateway':'OpenVPN',           tp==='dg'?'var(--cy)':'var(--or)'],
+    ['Reverse-DNS', d.rdns||ip.rdns||'–',                       'white'],
+    ['WAN-IP',      d.wan_ip||'–',                              'white'],
+    ['Kunden-ID',   String(d.customer_id||'–'),                 'white'],
+    ['Status',      'Aktiv',                                    'var(--gn)'],
+  ];
+  if (d.location)   fields.push(['Standort',   d.location,   'white']);
+  if (d.bandwidth)  fields.push(['Bandbreite', d.bandwidth,  'white']);
+  if (d.created_at) fields.push(['Erstellt',   d.created_at, 'white']);
+
+  document.getElementById('tab-body').innerHTML = `
+    <div class="igrid mb16">
+      ${fields.map(([l,v,c])=>`
+        <div class="icell">
+          <div class="ilbl">${l}</div>
+          <div class="ival" style="color:${c}">${esc(String(v))}</div>
+        </div>`).join('')}
+    </div>
+    <div class="sec">
+      <div class="sechd"><span>⟲ &nbsp;Reverse-DNS verwalten</span></div>
+      <div class="secb">
+        <div id="rdns-msg"></div>
+        <div class="fl flg8">
+          <input class="kfi" id="inp-rdns" placeholder="${esc(ip.rdns||d.rdns||'z.B. server.domain.de')}" style="flex:1;"
+            onkeydown="if(event.key==='Enter')kfip.submitRdns()"/>
+          <button class="btn btn-c" id="btn-rdns" onclick="kfip.submitRdns()">Setzen</button>
+        </div>
+        <div style="margin-top:8px;font-size:10px;color:var(--dm);">Aktuell: ${esc(ip.rdns||d.rdns||'–')}</div>
+      </div>
+    </div>
+  `;
+}
+
+async function submitRdns() {
+  const val = (document.getElementById('inp-rdns')?.value||'').trim();
+  if (!val) return;
+  const btn   = document.getElementById('btn-rdns');
+  const msgEl = document.getElementById('rdns-msg');
+  btn.textContent='…'; btn.disabled=true;
+  try {
+    const res = await call({action:'rdns_manage', id:S.sel}, {rdns:val});
+    if (res.error) {
+      msgEl.innerHTML = `<div class="msg msg-err">✗ ${esc(res.message||'Fehler')}</div>`;
+    } else {
+      msgEl.innerHTML = `<div class="msg msg-ok">✓ RDNS auf "${esc(val)}" gesetzt.</div>`;
+      const ip = S.ips.find(x=>x.id===S.sel);
+      if (ip) ip.rdns = val;
+      if (S.det) S.det.rdns = val;
+    }
+  } catch(e) {
+    msgEl.innerHTML = `<div class="msg msg-err">✗ ${esc(e.message)}</div>`;
+  }
+  btn.textContent='Setzen'; btn.disabled=false;
+}
+
+// ── TRAFFIC ───────────────────────────────────────────────────────────────────
+async function renderTraffic() {
+  const pLabel = {'1':'24 Stunden','7':'7 Tage','30':'30 Tage'};
+  document.getElementById('tab-body').innerHTML = `
+    <div class="fl flg8 mb14">
+      ${['1:24 Std','7:7 Tage','30:30 Tage'].map(p=>{const[v,l]=p.split(':');
+        return `<button class="perbtn${S.period===v?' active':''}" onclick="kfip.setPeriod('${v}')">${l}</button>`;
+      }).join('')}
+    </div>
+    <div class="sec mb14">
+      <div class="sechd">
+        <span>◈ &nbsp;Traffic-Graph · ${pLabel[S.period]}</span>
+        <span style="font-size:9px;opacity:.8;"><span style="color:var(--cy)">── TCP</span>&nbsp;&nbsp;<span style="color:var(--or)">--- UDP</span></span>
+      </div>
+      <div style="padding:12px 16px 8px;">
+        <div id="graph-wrap"><div class="gfx-ph"><span class="spin"></span>Lade Graph…</div></div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sechd"><span>⊟ &nbsp;Traffic-Tabelle · Letzte 30 Tage</span></div>
+      <div style="overflow-x:auto;" id="tbl-wrap">
+        <div style="padding:20px;text-align:center;"><span class="spin"></span></div>
+      </div>
+    </div>
+  `;
+  loadGraph();
+  loadTable();
+}
+
+async function loadGraph() {
+  try {
+    const res = await call({action:'traffic_graph', id:S.sel, period:S.period});
+    const w = document.getElementById('graph-wrap');
+    if (!w) return;
+    if (res.error || !res.image) {
+      w.innerHTML = `<div class="msg msg-err" style="margin:0;">✗ ${esc(res.message||'Graph nicht verfügbar')}</div>`;
+    } else {
+      w.innerHTML = `<img class="gfx-img" src="${res.image}" alt="Traffic Graph"/>
+        <div style="margin-top:4px;display:flex;justify-content:space-between;font-size:9px;color:var(--dmr);">
+          <span>${esc(S.period==='1'?'Letzte 24h':S.period==='7'?'Letzte 7 Tage':'Letzte 30 Tage')}</span>
+          <span>Heute</span>
+        </div>`;
+    }
+  } catch(e) {
+    const w = document.getElementById('graph-wrap');
+    if (w) w.innerHTML = `<div class="msg msg-err" style="margin:0;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+async function loadTable() {
+  try {
+    const res = await call({action:'traffic_table', id:S.sel});
+    const w = document.getElementById('tbl-wrap');
+    if (!w) return;
+    if (res.error) {
+      w.innerHTML = `<div class="secb"><div class="msg msg-err">✗ ${esc(res.message||'Fehler')}</div></div>`;
+      return;
+    }
+    const rows = Array.isArray(res.data) ? res.data : [];
+    const tot  = res.totals || {};
+    const maxT = Math.max(...rows.map(r=>+(r.total||0)), 0.01);
+
+    w.innerHTML = `
+      <table class="ktbl">
+        <thead><tr>
+          <th>Datum</th><th>TCP (GB)</th><th>UDP (GB)</th><th>ICMP (GB)</th><th>Gesamt (GB)</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r=>`
+            <tr>
+              <td style="color:var(--dm)">${esc(r.date||'')}</td>
+              <td style="color:var(--cy)">${(+(r.tcp||0)).toFixed(2)}</td>
+              <td style="color:var(--or)">${(+(r.udp||0)).toFixed(2)}</td>
+              <td style="color:var(--dmr)">${(+(r.icmp||0)).toFixed(3)}</td>
+              <td>${(+(r.total||0)).toFixed(2)}</td>
+              <td style="width:90px"><div class="tbar" style="width:${Math.max(2,(+(r.total||0)/maxT)*70)}px"></div></td>
+            </tr>`).join('')}
+          <tr style="font-weight:700;">
+            <td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;">∑ Gesamt</td>
+            <td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;">${(+(tot.tcp||0)).toFixed(2)}</td>
+            <td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;">${(+(tot.udp||0)).toFixed(2)}</td>
+            <td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;">${(+(tot.icmp||0)).toFixed(3)}</td>
+            <td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;">${(+(tot.total||0)).toFixed(2)}</td>
+            <td style="border-top:1px solid var(--bd);background:#00d4ff08;"></td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+  } catch(e) {
+    const w = document.getElementById('tbl-wrap');
+    if (w) w.innerHTML = `<div class="secb"><div class="msg msg-err">✗ ${esc(e.message)}</div></div>`;
+  }
+}
+
+function setPeriod(p) {
+  S.period=p;
+  document.querySelectorAll('.perbtn').forEach(b=>{
+    b.classList.toggle('active',
+      (p==='1'&&b.textContent.includes('24'))||
+      (p==='7'&&b.textContent.includes('7'))||
+      (p==='30'&&b.textContent.includes('30'))
+    );
+  });
+  // Refresh graph only (period doesn't affect table)
+  const gw = document.getElementById('graph-wrap');
+  if (gw) { gw.innerHTML='<div class="gfx-ph"><span class="spin"></span>Lade Graph…</div>'; }
+  loadGraph();
+}
+
+// ── TOOLS ─────────────────────────────────────────────────────────────────────
+function renderTools() {
+  const ip = S.ips.find(x=>x.id===S.sel)||{};
+  const d  = S.det||ip;
+  const tp = d.type||ip.type||'dg';
+
+  document.getElementById('tab-body').innerHTML = `
+    <div class="sec">
+      <div class="sechd"><span>⊛ &nbsp;Port-Scanner</span></div>
+      <div class="secb">
+        <div style="font-size:11px;color:var(--dm);margin-bottom:10px;">
+          TCP-Port-Erreichbarkeit über <span style="color:white;">${esc(ip.ip||d.ip||'')}</span> prüfen
+        </div>
+        <div class="fl flg8 mb14">
+          <input class="kfi" id="inp-port" type="number" min="1" max="65535" placeholder="Port (z.B. 443)"
+            style="width:140px;" onkeydown="if(event.key==='Enter')kfip.scanPort()"/>
+          <button class="btn btn-o" id="btn-scan" onclick="kfip.scanPort()">Prüfen →</button>
+        </div>
+        <div id="port-result" class="mb14"></div>
+        <div style="font-size:9px;color:var(--dmr);letter-spacing:.14em;margin-bottom:7px;">SCHNELLZUGRIFF</div>
+        <div class="fl" style="gap:5px;flex-wrap:wrap;" id="pq-wrap">
+          ${[['80','HTTP'],['443','HTTPS'],['22','SSH'],['21','FTP'],['25','SMTP'],['53','DNS'],
+             ['3306','MySQL'],['5432','PG'],['8080','HTTP-Alt'],['6881','BT']].map(([p,n])=>
+            `<button class="pq" onclick="kfip.quickPort('${p}')">${p} <span style="opacity:.45">${n}</span></button>`
+          ).join('')}
+        </div>
+      </div>
+    </div>
+    ${tp==='dg'?`
+    <div class="sec">
+      <div class="sechd"><span>⟳ &nbsp;DG-WAN-IP aktualisieren</span></div>
+      <div class="secb">
+        <div style="font-size:11px;color:var(--dm);margin-bottom:10px;">
+          Synchronisiert die WAN-IP des DG-Gateway-Eintrags in der Kossmann-Datenbank.<br>
+          Aktuelle WAN-IP: <span style="color:white;font-weight:700;">${esc(d.wan_ip||'–')}</span>
+        </div>
+        <div id="wan-msg" class="mb10"></div>
+        <button class="btn btn-c" id="btn-wan" onclick="kfip.updateWanIP()">WAN-IP aktualisieren</button>
+      </div>
+    </div>`:''}
+  `;
+}
+
+async function scanPort() {
+  const val = document.getElementById('inp-port')?.value?.trim();
+  if (!val) return;
+  const btn = document.getElementById('btn-scan');
+  const res = document.getElementById('port-result');
+  btn.innerHTML='<span class="spin"></span>'; btn.disabled=true;
+  try {
+    const r = await call({action:'portscan', id:S.sel}, {port:val});
+    if (r.error) {
+      res.innerHTML=`<div class="msg msg-err">✗ ${esc(r.message||'Fehler')}</div>`;
+    } else {
+      const open = r.open===true || r.status==='open' || r.result==='open';
+      res.innerHTML=`<div class="msg ${open?'msg-ok':'msg-err'}">
+        ${open?'✓ PORT OFFEN':'✗ PORT GESCHLOSSEN'}
+        <span style="opacity:.5;margin-left:12px;font-size:11px;">${esc(String(r.ip||''))}:${esc(String(r.port||val))} · TCP</span>
+      </div>`;
+    }
+  } catch(e) {
+    res.innerHTML=`<div class="msg msg-err">✗ ${esc(e.message)}</div>`;
+  }
+  btn.textContent='Prüfen →'; btn.disabled=false;
+}
+
+function quickPort(p) {
+  const inp = document.getElementById('inp-port');
+  if (inp) inp.value = p;
+  document.querySelectorAll('.pq').forEach(b=>b.classList.toggle('active',b.textContent.startsWith(p)));
+}
+
+async function updateWanIP() {
+  // Note: Kossmann API doesn't have a documented update_wan_ip action yet
+  // This calls a hypothetical endpoint – adjust action name if/when available
+  const btn   = document.getElementById('btn-wan');
+  const msgEl = document.getElementById('wan-msg');
+  btn.textContent='…'; btn.disabled=true;
+  try {
+    const r = await call({action:'update_wan_ip', id:S.sel});
+    if (r.error) {
+      msgEl.innerHTML=`<div class="msg msg-err">✗ ${esc(r.message||'Fehler')}</div>`;
+    } else {
+      msgEl.innerHTML=`<div class="msg msg-ok">✓ ${esc(r.message||'WAN-IP aktualisiert.')}</div>`;
+      if (r.wan_ip && S.det) S.det.wan_ip = r.wan_ip;
+    }
+  } catch(e) {
+    msgEl.innerHTML=`<div class="msg msg-err">✗ ${esc(e.message)}</div>`;
+  }
+  btn.textContent='WAN-IP aktualisieren'; btn.disabled=false;
+}
+
+// ── CREDENTIALS ───────────────────────────────────────────────────────────────
+function showCreds() {
+  const ov = document.getElementById('creds-ov');
+  ov.style.display='flex';
+}
+
+function hideCreds() {
+  document.getElementById('creds-ov').style.display='none';
+}
+
+async function saveCredentials() {
+  const cid = (document.getElementById('inp-cid')?.value||'').trim();
+  const pwd = (document.getElementById('inp-pwd')?.value||'').trim();
+  const msg = document.getElementById('creds-msg');
+  if (!cid||!pwd) { msg.innerHTML='<div class="msg msg-err">✗ Bitte alle Felder ausfüllen.</div>'; return; }
+  msg.innerHTML='<div class="msg msg-inf"><span class="spin"></span> Speichere…</div>';
+  try {
+    const r = await call({}, {_op:'save_config', customer_id:cid, password:pwd});
+    if (r.ok||!r.error) {
+      S.configured=true;
+      msg.innerHTML='<div class="msg msg-ok">✓ Gespeichert. Lade IP-Liste…</div>';
+      setTimeout(()=>{ hideCreds(); loadList(); }, 800);
+    } else {
+      msg.innerHTML=`<div class="msg msg-err">✗ ${esc(r.message||'Fehler')}</div>`;
+    }
+  } catch(e) {
+    msg.innerHTML=`<div class="msg msg-err">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+// Overlay per Klick außerhalb schließen
+document.getElementById('creds-ov').addEventListener('click', e=>{
+  if (e.target===e.currentTarget) hideCreds();
+});
+
+// ── START ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
+
+return { init, reload, selectIP, setTab, setPeriod, submitRdns, scanPort, quickPort, updateWanIP, showCreds, hideCreds, saveCredentials };
+
+})();
+</script>
+</body>
+</html>
+
+]]>
+</INLINE>
+</FILE>
+
+<!-- ── 2. Unraid Menüeintrag (Utilities → Kossmann Feste IP) ── -->
+<FILE Name="/usr/local/emhttp/plugins/&name;/KossmannFesteIP.page">
+<INLINE>
+<![CDATA[
+Menu="Utilities"
+Title="Kossmann Feste IP"
+Tag="network-wired"
+---
+<?php
+/**
+ * Kossmann Feste IP Manager – Unraid Plugin
+ * Stellt die PHP-App in einem vollflächigen iFrame dar.
+ */
+$pluginDir = '/usr/local/emhttp/plugins/kossmann-festeip-manager';
+?>
+<style>
+#kfip-wrap { width:100%; height:calc(100vh - 130px); min-height:500px; }
+#kfip-frame { width:100%; height:100%; border:none; border-radius:4px; display:block; }
+</style>
+<div id="kfip-wrap">
+  <iframe id="kfip-frame"
+          src="/plugins/kossmann-festeip-manager/KossmannFesteIP.php"
+          title="Kossmann Feste IP Manager"
+          allowfullscreen>
+  </iframe>
+</div>
+
+]]>
+</INLINE>
+</FILE>
+
+<!-- ── 3. Installations-Script ── -->
+<FILE Run="/bin/bash">
+<INLINE>
+<![CDATA[
+#!/bin/bash
+set -e
+PLUGIN_DIR="/usr/local/emhttp/plugins/kossmann-festeip-manager"
+CONFIG_DIR="/boot/config/plugins/kossmann-festeip-manager"
+chmod 644 "$PLUGIN_DIR/KossmannFesteIP.php"
+chmod 644 "$PLUGIN_DIR/KossmannFesteIP.page"
+mkdir -p "$CONFIG_DIR"
+echo ""
+echo "╔════════════════════════════════════════════════╗"
+echo "║  Kossmann Feste IP Manager v0.1.0 installiert  ║"
+echo "║  → Browser neu laden  →  Utilities → Kossmann  ║"
+echo "╚════════════════════════════════════════════════╝"
+echo ""
+]]>
+</INLINE>
+</FILE>
+
+<!-- ── 4. Deinstallations-Script ── -->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+<![CDATA[
+#!/bin/bash
+rm -rf /usr/local/emhttp/plugins/kossmann-festeip-manager
+# Zugangsdaten bleiben erhalten – zum Löschen auskommentieren:
+# rm -rf /boot/config/plugins/kossmann-festeip-manager
+echo "Kossmann Feste IP Manager entfernt."
+]]>
+</INLINE>
+</FILE>
+
+</PLUGIN>
