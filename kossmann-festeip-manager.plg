@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.1.2">
+  <!ENTITY version   "0.1.3">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;"
@@ -14,27 +14,23 @@
         support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.1.3
+- Fix: Feste-IP-ID zeigt jetzt sicher den korrekten Wert (S.sel als primäre Quelle)
+- Fix: find()-Vergleich auf String-Basis (behebt Type-Mismatch String vs. Number)
+
 ##0.1.2
-- Fix: DG-WAN-IP Action-Name korrigiert (dgwan_manage, war: update_wan_ip)
-- Fix: Eingabefeld für neue WAN-IP (dg_ipv4_neu) ergänzt
-- Warnhinweis: Kernnetz-Routing + Support-E-Mail bei dgwan_manage
-- Bestätigungsdialog vor WAN-IP-Änderung
+- Fix: DG-WAN-IP Action dgwan_manage + Eingabefeld dg_ipv4_neu + Warnhinweis
 
 ##0.1.1
-- Feste-IP-ID in der Übersicht angezeigt (S.sel als sicherer Fallback)
+- Feste-IP-ID in Übersicht ergänzt
 
 ##0.1.0
 - Initiales Release
-- Alle Feste IPs auflisten (DG-Gateway + OpenVPN)
-- IP-Details, Reverse-DNS, Traffic-Graph/-Tabelle, Port-Scanner
-- Fix: GET-basierte API-Kommunikation (Unraid 7.x nginx-Kompatibilität)
-- Fix: php://input Fallback, ob_start/try-catch im API-Handler
-- Ping-Endpunkt für Diagnose (?api=1&amp;action=ping)
 </CHANGES>
 
 <!--
   ╔══════════════════════════════════════════════════════════════╗
-  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.2          ║
+  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.3       ║
   ╚══════════════════════════════════════════════════════════════╝
 -->
 
@@ -47,7 +43,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.1.2';
+const KFIP_VER        = '0.1.3';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -472,7 +468,7 @@ async function selectIP(id) {
 }
 
 function showLoading() {
-  const ip = S.ips.find(x=>x.id===S.sel);
+  const ip = S.ips.find(x=>String(x.id)===String(S.sel));
   document.getElementById('content-area').innerHTML = `
     <div class="ctr"><span class="spin"></span><span style="font-size:11px;color:var(--dm);">Lade ${esc(ip?.ip||'')}…</span></div>`;
 }
@@ -484,7 +480,7 @@ function showError(msg) {
 
 // ── CONTENT RENDER ────────────────────────────────────────────────────────────
 function renderContent() {
-  const ip = S.ips.find(x=>x.id===S.sel) || {};
+  const ip = S.ips.find(x=>String(x.id)===String(S.sel))||{};
   const d  = S.det || ip;
   const tp = d.type || ip.type || 'dg';
 
@@ -530,13 +526,13 @@ function renderTab() {
 
 // ── ÜBERSICHT ─────────────────────────────────────────────────────────────────
 function renderOverview() {
-  const ip = S.ips.find(x=>x.id===S.sel)||{};
+  const ip = S.ips.find(x=>String(x.id)===String(S.sel))||{};
   const d  = S.det||ip;
   const tp = d.type||ip.type||'dg';
 
   const fields = [
     ['IP-Adresse',  ip.ip||d.ip||'–',                          'white'],
-    ['Feste-IP-ID', String(d.id ?? ip.id ?? S.sel ?? '–'),      'var(--cy)'],
+    ['Feste-IP-ID', S.sel != null ? String(S.sel) : (d.id ?? ip.id ?? '–'), 'var(--cy)'],
     ['Typ',         tp==='dg'?'DG-Gateway':'OpenVPN',           tp==='dg'?'var(--cy)':'var(--or)'],
     ['Reverse-DNS', d.rdns||ip.rdns||'–',                       'white'],
     ['WAN-IP',      d.wan_ip||'–',                              'white'],
@@ -582,7 +578,7 @@ async function submitRdns() {
       msgEl.innerHTML = `<div class="msg msg-err">✗ ${esc(res.message||'Fehler')}</div>`;
     } else {
       msgEl.innerHTML = `<div class="msg msg-ok">✓ RDNS auf "${esc(val)}" gesetzt.</div>`;
-      const ip = S.ips.find(x=>x.id===S.sel);
+      const ip = S.ips.find(x=>String(x.id)===String(S.sel));
       if (ip) ip.rdns = val;
       if (S.det) S.det.rdns = val;
     }
@@ -703,7 +699,7 @@ function setPeriod(p) {
 
 // ── TOOLS ─────────────────────────────────────────────────────────────────────
 function renderTools() {
-  const ip = S.ips.find(x=>x.id===S.sel)||{};
+  const ip = S.ips.find(x=>String(x.id)===String(S.sel))||{};
   const d  = S.det||ip;
   const tp = d.type||ip.type||'dg';
 
@@ -898,7 +894,8 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAiEklEQVR4nO3dP29cR5ov4GrPRB
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.1.2 installiert      ║"
+echo "║  Kossmann Feste IP Manager v0.1.3 installiert    ║"
+echo "║  Browser neu laden  →  Utilities → Kossmann        ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
