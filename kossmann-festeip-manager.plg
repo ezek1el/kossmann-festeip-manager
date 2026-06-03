@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.1.1">
+  <!ENTITY version   "0.1.2">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;"
@@ -14,25 +14,27 @@
         support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.1.2
+- Fix: DG-WAN-IP Action-Name korrigiert (dgwan_manage, war: update_wan_ip)
+- Fix: Eingabefeld für neue WAN-IP (dg_ipv4_neu) ergänzt
+- Warnhinweis: Kernnetz-Routing + Support-E-Mail bei dgwan_manage
+- Bestätigungsdialog vor WAN-IP-Änderung
+
 ##0.1.1
 - Feste-IP-ID in der Übersicht angezeigt (S.sel als sicherer Fallback)
 
 ##0.1.0
 - Initiales Release
 - Alle Feste IPs auflisten (DG-Gateway + OpenVPN)
-- IP-Details, Reverse-DNS setzen
-- Traffic-Graph (1/7/30 Tage) und Traffic-Tabelle (30 Tage)
-- TCP-Port-Scanner mit Schnellzugriff
-- DG-WAN-IP aktualisieren
+- IP-Details, Reverse-DNS, Traffic-Graph/-Tabelle, Port-Scanner
 - Fix: GET-basierte API-Kommunikation (Unraid 7.x nginx-Kompatibilität)
 - Fix: php://input Fallback, ob_start/try-catch im API-Handler
 - Ping-Endpunkt für Diagnose (?api=1&amp;action=ping)
-- Custom Plugin-Icon
 </CHANGES>
 
 <!--
   ╔══════════════════════════════════════════════════════════════╗
-  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.1       ║
+  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.2       ║
   ╚══════════════════════════════════════════════════════════════╝
 -->
 
@@ -45,7 +47,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.1.1';
+const KFIP_VER        = '0.1.2';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -129,7 +131,7 @@ if (isset($_GET['api'])) {
         exit;
     }
 
-    $allowed = ['list', 'details', 'traffic_graph', 'traffic_table', 'rdns_manage', 'portscan'];
+    $allowed = ['list', 'details', 'traffic_graph', 'traffic_table', 'rdns_manage', 'portscan', 'dgwan_manage'];
     if (!in_array($action, $allowed, true)) {
         ob_end_clean();
         http_response_code(400);
@@ -152,8 +154,8 @@ if (isset($_GET['api'])) {
         CURLOPT_HTTPHEADER     => ['Accept: application/json'],
     ]);
 
-    // rdns_manage und portscan erfordern POST zur Kossmann-API.
-    // Werte kommen via GET-Parameter (umgeht nginx-POST-Routing nach emhttp).
+    // Aktionen die POST zur Kossmann-API erfordern.
+    // Parameter kommen via GET (umgeht nginx POST-Routing nach emhttp in Unraid 7.x).
     if ($action === 'rdns_manage') {
         $rdns_val = trim($_GET['rdns'] ?? kfip_post('rdns'));
         curl_setopt($ch, CURLOPT_POST, true);
@@ -162,6 +164,10 @@ if (isset($_GET['api'])) {
         $port_val = (int) ($_GET['port'] ?? kfip_post('port', '0'));
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, 'port=' . $port_val);
+    } elseif ($action === 'dgwan_manage') {
+        $new_ip = trim($_GET['dg_ipv4_neu'] ?? kfip_post('dg_ipv4_neu', ''));
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, 'dg_ipv4_neu=' . urlencode($new_ip));
     }
 
     $response = curl_exec($ch);
@@ -728,11 +734,19 @@ function renderTools() {
       <div class="sechd"><span>⟳ &nbsp;DG-WAN-IP aktualisieren</span></div>
       <div class="secb">
         <div style="font-size:11px;color:var(--dm);margin-bottom:10px;">
-          Synchronisiert die WAN-IP des DG-Gateway-Eintrags in der Kossmann-Datenbank.<br>
+          Leitet die öffentliche IP auf eine neue Router-WAN-IP um.<br>
+          Aktualisiert RouterOS, Datenbank und PowerDNS – benachrichtigt den Support per E-Mail.<br>
           Aktuelle WAN-IP: <span style="color:white;font-weight:700;">${esc(d.wan_ip||'–')}</span>
         </div>
-        <div id="wan-msg" class="mb10"></div>
-        <button class="btn btn-c" id="btn-wan" onclick="kfip.updateWanIP()">WAN-IP aktualisieren</button>
+        <div class="fl flg8 mb10">
+          <input class="kfi" id="inp-wan-ip" placeholder="Neue WAN-IP (z.B. 198.51.100.10)"
+            style="flex:1;" onkeydown="if(event.key==='Enter')kfip.updateWanIP()"/>
+          <button class="btn btn-c" id="btn-wan" onclick="kfip.updateWanIP()">Aktualisieren</button>
+        </div>
+        <div id="wan-msg"></div>
+        <div style="font-size:10px;color:var(--rd);padding:6px 8px;background:#ff3f6010;border:1px solid #ff3f6025;border-radius:4px;">
+          ⚠ Diese Aktion ändert das Routing im Kernnetz und kann nicht automatisch rückgängig gemacht werden.
+        </div>
       </div>
     </div>`:''}
   `;
@@ -768,23 +782,24 @@ function quickPort(p) {
 }
 
 async function updateWanIP() {
-  // Note: Kossmann API doesn't have a documented update_wan_ip action yet
-  // This calls a hypothetical endpoint – adjust action name if/when available
+  const newIp = (document.getElementById('inp-wan-ip')?.value||'').trim();
+  if (!newIp) return;
+  if (!confirm(`WAN-IP auf "${newIp}" setzen?\n\nDiese Aktion ändert das Routing im Kernnetz und benachrichtigt den Kossmann-Support per E-Mail.`)) return;
   const btn   = document.getElementById('btn-wan');
   const msgEl = document.getElementById('wan-msg');
   btn.textContent='…'; btn.disabled=true;
   try {
-    const r = await call({action:'update_wan_ip', id:S.sel});
+    const r = await call({action:'dgwan_manage', id:S.sel, dg_ipv4_neu:newIp});
     if (r.error) {
       msgEl.innerHTML=`<div class="msg msg-err">✗ ${esc(r.message||'Fehler')}</div>`;
     } else {
       msgEl.innerHTML=`<div class="msg msg-ok">✓ ${esc(r.message||'WAN-IP aktualisiert.')}</div>`;
-      if (r.wan_ip && S.det) S.det.wan_ip = r.wan_ip;
+      if (S.det) S.det.wan_ip = newIp;
     }
   } catch(e) {
     msgEl.innerHTML=`<div class="msg msg-err">✗ ${esc(e.message)}</div>`;
   }
-  btn.textContent='WAN-IP aktualisieren'; btn.disabled=false;
+  btn.textContent='Aktualisieren'; btn.disabled=false;
 }
 
 // ── CREDENTIALS ───────────────────────────────────────────────────────────────
@@ -883,7 +898,7 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAiEklEQVR4nO3dP29cR5ov4GrPRB
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.1.1 installiert    ║"
+echo "║  Kossmann Feste IP Manager v0.1.2 installiert    ║"
 echo "║  Browser neu laden  →  Utilities → Kossmann        ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
