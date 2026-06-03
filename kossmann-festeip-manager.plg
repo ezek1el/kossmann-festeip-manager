@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.1.3">
+  <!ENTITY version   "0.1.4">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;"
@@ -14,12 +14,16 @@
         support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.1.4
+- findId() Auto-Erkennung: findet ID-Feld unabhängig vom Namen (id, ip_id, festeip_id, ...)
+- Debug-Panel in der Übersicht: zeigt API-Rohantwort und erkannte Felder
+- Redundanten zweiten list-Call entfernt
+
 ##0.1.3
-- Fix: Feste-IP-ID zeigt jetzt sicher den korrekten Wert (S.sel als primäre Quelle)
-- Fix: find()-Vergleich auf String-Basis (behebt Type-Mismatch String vs. Number)
+- Fix: find()-Vergleich auf String-Basis (Type-Mismatch)
 
 ##0.1.2
-- Fix: DG-WAN-IP Action dgwan_manage + Eingabefeld dg_ipv4_neu + Warnhinweis
+- Fix: DG-WAN-IP Action dgwan_manage + Eingabefeld + Warnhinweis
 
 ##0.1.1
 - Feste-IP-ID in Übersicht ergänzt
@@ -30,7 +34,7 @@
 
 <!--
   ╔══════════════════════════════════════════════════════════════╗
-  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.3       ║
+  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.4          ║
   ╚══════════════════════════════════════════════════════════════╝
 -->
 
@@ -43,7 +47,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.1.3';
+const KFIP_VER        = '0.1.4';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -370,7 +374,19 @@ const API  = '<?= $selfUrl ?>';
 const CONF = <?= $configured ? 'true' : 'false' ?>;
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
-const S = { configured: CONF, ips:[], sel:null, det:null, tab:'overview', period:'7' };
+const S = { configured: CONF, ips:[], sel:null, det:null, tab:'overview', period:'7', rawList:null, rawDet:null };
+
+// Findet das ID-Feld unabhängig vom Namen (id, ip_id, festeip_id, ID, ...)
+function findId(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  if (obj.id != null && obj.id !== '') return obj.id;            // exakt 'id' bevorzugt
+  for (const [k, v] of Object.entries(obj)) {                     // sonst irgendein *id*-Feld
+    if (/(^|_)id($|_)/i.test(k) && (typeof v === 'number' || (typeof v === 'string' && v !== ''))) {
+      return v;
+    }
+  }
+  return null;
+}
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
 function esc(s) {
@@ -429,11 +445,11 @@ async function loadList() {
     const res = await call({action:'list'});
     if (res.error) { setStatus(false, res.message||'API-Fehler'); return; }
     S.ips = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);
-    const cfg = await call({action:'list'}); // re-use response to get customer id
+    S.rawList = res;
     const firstCid = S.ips[0]?.customer_id || '';
     setStatus(true, firstCid || '–');
     renderSidebar();
-    if (S.ips.length > 0) selectIP(S.ips[0].id);
+    if (S.ips.length > 0) selectIP(findId(S.ips[0]));
     else document.getElementById('empty-msg').textContent = 'Keine Feste IPs vorhanden.';
   } catch(e) { setStatus(false, e.message); }
 }
@@ -441,8 +457,10 @@ async function loadList() {
 // ── SIDEBAR ───────────────────────────────────────────────────────────────────
 function renderSidebar() {
   document.getElementById('ip-count').textContent = `Feste IPs · ${S.ips.length}`;
-  document.getElementById('ip-list').innerHTML = S.ips.map(ip => `
-    <div class="ipc${ip.id===S.sel?' active':''}" onclick="kfip.selectIP(${ip.id})">
+  document.getElementById('ip-list').innerHTML = S.ips.map(ip => {
+    const _id = findId(ip);
+    return `
+    <div class="ipc${String(_id)===String(S.sel)?' active':''}" onclick="kfip.selectIP('${_id}')">
       <div class="fl fla flg8 mb10" style="margin-bottom:3px;">
         <span class="dot"></span>
         <span class="ip-a">${esc(ip.ip||'')}</span>
@@ -451,7 +469,7 @@ function renderSidebar() {
       <div class="ip-lb">${esc(ip.label||ip.ip||'')}</div>
       <div class="ip-rd">${esc(ip.rdns||'')}</div>
     </div>
-  `).join('');
+  `;}).join('');
 }
 
 // ── SELECT IP ─────────────────────────────────────────────────────────────────
@@ -463,6 +481,7 @@ async function selectIP(id) {
     const res = await call({action:'details', id});
     if (res.error) { showError(res.message); return; }
     S.det = res.data || res;
+    S.rawDet = res;
     renderContent();
   } catch(e) { showError(e.message); }
 }
@@ -532,7 +551,7 @@ function renderOverview() {
 
   const fields = [
     ['IP-Adresse',  ip.ip||d.ip||'–',                          'white'],
-    ['Feste-IP-ID', S.sel != null ? String(S.sel) : (d.id ?? ip.id ?? '–'), 'var(--cy)'],
+    ['Feste-IP-ID', String(findId(d) ?? findId(ip) ?? S.sel ?? '–'), 'var(--cy)'],
     ['Typ',         tp==='dg'?'DG-Gateway':'OpenVPN',           tp==='dg'?'var(--cy)':'var(--or)'],
     ['Reverse-DNS', d.rdns||ip.rdns||'–',                       'white'],
     ['WAN-IP',      d.wan_ip||'–',                              'white'],
@@ -563,6 +582,24 @@ function renderOverview() {
         <div style="margin-top:8px;font-size:10px;color:var(--dm);">Aktuell: ${esc(ip.rdns||d.rdns||'–')}</div>
       </div>
     </div>
+
+    <details class="sec" style="padding:0;">
+      <summary style="padding:10px 16px;cursor:pointer;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dmr);user-select:none;">
+        ⚙ Debug-Daten (API-Rohantwort)
+      </summary>
+      <div class="secb" style="border-top:1px solid var(--bd);">
+        <div style="font-size:10px;color:var(--dm);margin-bottom:8px;">
+          S.sel = <span style="color:var(--cy)">${esc(String(S.sel))}</span>
+          (${esc(typeof S.sel)}) &nbsp;|&nbsp;
+          findId(Liste)= <span style="color:var(--cy)">${esc(String(findId(ip)))}</span> &nbsp;|&nbsp;
+          findId(Details)= <span style="color:var(--cy)">${esc(String(findId(d)))}</span>
+        </div>
+        <div style="font-size:9px;color:var(--dmr);letter-spacing:.1em;margin:8px 0 4px;">LISTEN-EINTRAG (keys: ${esc(Object.keys(ip).join(', ')||'–')})</div>
+        <pre style="background:var(--bg3);border:1px solid var(--bd);border-radius:4px;padding:10px;font-size:11px;overflow-x:auto;color:var(--tx);margin:0 0 10px;white-space:pre-wrap;word-break:break-all;">${esc(JSON.stringify(ip, null, 2))}</pre>
+        <div style="font-size:9px;color:var(--dmr);letter-spacing:.1em;margin:8px 0 4px;">DETAILS-ANTWORT (keys: ${esc(Object.keys(d).join(', ')||'–')})</div>
+        <pre style="background:var(--bg3);border:1px solid var(--bd);border-radius:4px;padding:10px;font-size:11px;overflow-x:auto;color:var(--tx);margin:0;white-space:pre-wrap;word-break:break-all;">${esc(JSON.stringify(d, null, 2))}</pre>
+      </div>
+    </details>
   `;
 }
 
@@ -894,8 +931,7 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAiEklEQVR4nO3dP29cR5ov4GrPRB
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.1.3 installiert    ║"
-echo "║  Browser neu laden  →  Utilities → Kossmann        ║"
+echo "║  Kossmann Feste IP Manager v0.1.4 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
