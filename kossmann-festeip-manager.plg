@@ -34,7 +34,7 @@
 
 <!--
   ╔══════════════════════════════════════════════════════════════╗
-  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.2       ║
+  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.2          ║
   ╚══════════════════════════════════════════════════════════════╝
 -->
 
@@ -898,8 +898,7 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAiEklEQVR4nO3dP29cR5ov4GrPRB
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.1.2 installiert    ║"
-echo "║  Browser neu laden  →  Utilities → Kossmann        ║"
+echo "║  Kossmann Feste IP Manager v0.1.2 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
