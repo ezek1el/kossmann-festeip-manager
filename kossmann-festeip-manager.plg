@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.1.0">
-  <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager-0.1.0.plg">
+  <!ENTITY version   "0.1.1">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager-0.1.1.plg">
 ]>
 <PLUGIN name="&name;"
         author="&author;"
@@ -14,6 +14,9 @@
         support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.1.1
+- Feste-IP-ID in der Übersicht angezeigt
+
 ##0.1.0
 - Initiales Release
 - Alle Feste IPs auflisten (DG-Gateway + OpenVPN)
@@ -21,16 +24,15 @@
 - Traffic-Graph (1/7/30 Tage) und Traffic-Tabelle (30 Tage)
 - TCP-Port-Scanner mit Schnellzugriff
 - DG-WAN-IP aktualisieren
-- Fix: alle Browser-zu-PHP-Aufrufe auf GET umgestellt (Unraid 7.x nginx-Kompatibilität)
-- Fix: php://input Fallback für POST-Body-Parsing
-- Fix: ob_start/try-catch im API-Handler
+- Fix: GET-basierte API-Kommunikation (Unraid 7.x nginx-Kompatibilität)
+- Fix: php://input Fallback, ob_start/try-catch im API-Handler
 - Ping-Endpunkt für Diagnose (?api=1&amp;action=ping)
 - Custom Plugin-Icon
 </CHANGES>
 
 <!--
   ╔══════════════════════════════════════════════════════════════╗
-  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.0         ║
+  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.1       ║
   ╚══════════════════════════════════════════════════════════════╝
 -->
 
@@ -43,7 +45,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.1.0';
+const KFIP_VER        = '0.1.1';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -528,6 +530,7 @@ function renderOverview() {
 
   const fields = [
     ['IP-Adresse',  ip.ip||d.ip||'–',                          'white'],
+    ['Feste-IP-ID', String(d.id||ip.id||'–'),                   'var(--cy)'],
     ['Typ',         tp==='dg'?'DG-Gateway':'OpenVPN',           tp==='dg'?'var(--cy)':'var(--or)'],
     ['Reverse-DNS', d.rdns||ip.rdns||'–',                       'white'],
     ['WAN-IP',      d.wan_ip||'–',                              'white'],
@@ -880,7 +883,7 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAiEklEQVR4nO3dP29cR5ov4GrPRB
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.1.0 installiert   ║"
+echo "║  Kossmann Feste IP Manager v0.1.1 installiert    ║"
 echo "║  Browser neu laden  →  Utilities → Kossmann        ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
@@ -893,7 +896,6 @@ echo ""
 <![CDATA[
 #!/bin/bash
 rm -rf /usr/local/emhttp/plugins/kossmann-festeip-manager
-# Zugangsdaten bleiben erhalten – zum Löschen auskommentieren:
 # rm -rf /boot/config/plugins/kossmann-festeip-manager
 echo "Kossmann Feste IP Manager entfernt."
 ]]>
