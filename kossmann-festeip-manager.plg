@@ -2,17 +2,19 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.2.0">
+  <!ENTITY version   "0.3.0">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;"
         icon="images/plugin-icon.png" min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.3.0
+- Dashboard-Karte: eingeklappt (IP + Traffic), ausgeklappt (alle Details + Traffic-Tabelle)
+- sessionStorage-Cache (5 Min), Auto-Refresh
+
 ##0.2.0
-- Farbpalette an Unraid UI angepasst
-- Icon: Globus mit vertikaler Ellipse und K in der Mitte
-- Fix: Update-Erkennung – Stub an beiden Pfaden
+- Farbpalette Unraid-kompatibel, Icon Globus+K
 
 ##0.1.0–0.1.8
 - Initiales Release + Bugfixes
@@ -25,7 +27,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.2.0">
+  <!ENTITY version   "0.3.0">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;"
@@ -43,7 +45,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.2.0';
+const KFIP_VER        = '0.3.0';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -966,6 +968,168 @@ $pluginDir = '/usr/local/emhttp/plugins/kossmann-festeip-manager';
 </INLINE>
 </FILE>
 
+<FILE Name="/usr/local/emhttp/plugins/&name;/KossmannFesteIPDashboard.page">
+<INLINE>
+<![CDATA[
+Type="widg"
+---
+<?php
+$cfg = @json_decode(@file_get_contents('/boot/config/plugins/kossmann-festeip-manager/config.json') ?: '{}', true);
+if (empty($cfg['customer_id']) || empty($cfg['password'])) return;
+?>
+<style>
+#kfip-dc{font-family:'Roboto',Arial,sans-serif;font-size:12px;color:#d9d9d9;border:1px solid #383a3f;border-radius:4px;overflow:hidden;margin:4px 0 6px;}
+.kfip-hd{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:#222428;cursor:pointer;user-select:none;}
+.kfip-hd-l{display:flex;align-items:center;gap:8px;font-weight:600;}
+.kfip-arrow{font-size:11px;color:#7e8286;transition:transform .2s;}
+.kfip-arrow.open{transform:rotate(180deg);}
+.kfip-mini-row{display:flex;align-items:center;gap:6px;padding:5px 10px;background:#1c1d21;border-top:1px solid #2e3035;}
+.kfip-mini-ip{font-family:monospace;color:#1d9ac7;font-weight:700;}
+.kfip-badge{font-size:9px;padding:1px 5px;border-radius:3px;text-transform:uppercase;font-weight:700;}
+.kfip-badge.dg{background:#1d9ac718;color:#1d9ac7;border:1px solid #1d9ac744;}
+.kfip-badge.ov{background:#e69b1e18;color:#e69b1e;border:1px solid #e69b1e44;}
+.kfip-mini-trf{margin-left:auto;color:#7e8286;font-size:11px;}
+.kfip-body{background:#1c1d21;border-top:1px solid #383a3f;}
+.kfip-ip-block{padding:10px;border-bottom:1px solid #2e3035;}
+.kfip-ip-title{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+.kfip-ip-addr{font-family:monospace;color:#1d9ac7;font-weight:700;font-size:13px;}
+.kfip-dgrid{display:grid;grid-template-columns:90px 1fr;gap:2px 8px;margin-bottom:8px;}
+.kfip-dl{color:#7e8286;font-size:10px;text-transform:uppercase;letter-spacing:.1em;}
+.kfip-dv{color:#d9d9d9;font-family:monospace;font-size:11px;word-break:break-all;}
+.kfip-trf-hd{font-size:10px;color:#7e8286;text-transform:uppercase;letter-spacing:.1em;margin:6px 0 4px;}
+.kfip-trf-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:3px;}
+.kfip-trf-cell{background:#222428;border-radius:3px;padding:4px 7px;display:flex;justify-content:space-between;}
+.kfip-trf-n{color:#7e8286;font-size:10px;}
+.kfip-trf-v{font-size:11px;font-weight:600;}
+.kfip-foot{padding:6px 10px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #2e3035;}
+.kfip-link{color:#1d9ac7;text-decoration:none;font-size:11px;}
+.kfip-link:hover{text-decoration:underline;}
+.kfip-dot{width:6px;height:6px;border-radius:50%;background:#56b870;display:inline-block;flex-shrink:0;}
+</style>
+
+<div id="kfip-dc">
+  <div class="kfip-hd" onclick="kfipDash.toggle()">
+    <div class="kfip-hd-l">
+      <img src="/plugins/kossmann-festeip-manager/images/plugin-icon.png" width="18" height="18" style="border-radius:3px;">
+      Kossmann Feste IP
+    </div>
+    <span class="kfip-arrow" id="kfip-arrow">▾</span>
+  </div>
+  <div id="kfip-mini"><div class="kfip-mini-row" style="color:#7e8286;font-style:italic;">Lade…</div></div>
+  <div class="kfip-body" id="kfip-body" style="display:none;">
+    <div id="kfip-detail"></div>
+    <div class="kfip-foot">
+      <span id="kfip-ts" style="font-size:10px;color:#555759;"></span>
+      <a class="kfip-link" href="/plugins/kossmann-festeip-manager/KossmannFesteIP.php" target="_top">→ Plugin öffnen</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const kfipDash = (() => {
+  const API = '/plugins/kossmann-festeip-manager/KossmannFesteIP.php';
+  const KEY = 'kfip_dash_3';
+  const TTL = 5*60*1000;
+  let open = false, data = null;
+
+  function esc(s){const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML;}
+  function findId(o){if(!o)return null;if(o.id!=null&&o.id!=='')return o.id;for(const[k,v]of Object.entries(o)){if(/(^|_)id($|_)/i.test(k)&&(typeof v==='number'||(typeof v==='string'&&v!=='')))return v;}return null;}
+  function findIp(o){if(!o)return null;const rx=/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;for(const k of['ip','ipv4','ip_address','address']){if(o[k]&&rx.test(String(o[k])))return o[k];}for(const[,v]of Object.entries(o)){if(typeof v==='string'&&rx.test(v))return v;}return null;}
+  function findField(o,ks){if(!o)return null;for(const k of ks)if(o[k]!=null&&o[k]!=='')return o[k];return null;}
+  function normType(t){if(!t)return'dg';return/dg|gate/i.test(String(t))?'dg':'ovpn';}
+
+  async function call(p){
+    const r=await fetch(`${API}?api=1&${new URLSearchParams(p)}`);
+    const t=await r.text();
+    if(!t.trim())throw new Error(`Leere Antwort (${r.status})`);
+    return JSON.parse(t);
+  }
+
+  async function loadAll(){
+    try{const c=JSON.parse(sessionStorage.getItem(KEY)||'null');if(c&&Date.now()-c.ts<TTL)return c.data;}catch(e){}
+    const list=await call({action:'list'});
+    const ips=Array.isArray(list.data)?list.data:(Array.isArray(list)?list:[]);
+    const entries=await Promise.all(ips.map(async ip=>{
+      const id=findId(ip);
+      try{
+        const[det,trf]=await Promise.all([call({action:'details',id}),call({action:'traffic_table',id})]);
+        return{ip,det:det.data||det,trf};
+      }catch(e){return{ip,det:null,trf:null};}
+    }));
+    try{sessionStorage.setItem(KEY,JSON.stringify({ts:Date.now(),data:entries}));}catch(e){}
+    return entries;
+  }
+
+  function renderMini(entries){
+    document.getElementById('kfip-mini').innerHTML=entries.length?entries.map(e=>{
+      const ip=findIp(e.det)||findIp(e.ip)||'–';
+      const tp=normType((e.det||e.ip||{}).type);
+      const tot=e.trf?.totals||{};
+      const numCols=Object.keys(tot).filter(k=>typeof tot[k]==='number'||(typeof tot[k]==='string'&&!isNaN(+tot[k])&&tot[k]!==''));
+      const totVal=numCols.length?(+(tot[numCols.find(k=>/(total|sum|ip)$/i.test(k))||numCols[numCols.length-1]]||0)).toFixed(1):'–';
+      return`<div class="kfip-mini-row"><span class="kfip-dot"></span><span class="kfip-mini-ip">${esc(ip)}</span><span class="kfip-badge ${tp}">${tp==='dg'?'DG':'OVPN'}</span><span class="kfip-mini-trf">${totVal!=='–'?totVal+' GB (30T)':'–'}</span></div>`;
+    }).join(''):'<div class="kfip-mini-row" style="color:#7e8286;">Keine IPs</div>';
+  }
+
+  function renderDetail(entries){
+    const COL_L={tcp:'TCP',udp:'UDP',icmp:'ICMP',ip:'IP',total:'Gesamt',sum:'Gesamt'};
+    const COL_C={tcp:'#1d9ac7',udp:'#e69b1e',icmp:'#7e8286',ip:'#d9d9d9',total:'#56b870',sum:'#56b870'};
+    document.getElementById('kfip-detail').innerHTML=entries.map(e=>{
+      const d=e.det||e.ip||{};const ip=e.ip||{};
+      const ipS=findIp(d)||findIp(ip)||'–';
+      const tp=normType(d.type||ip.type);
+      const id=findId(d)||findId(ip)||'–';
+      const rdns=findField(d,['rdns','reverse_dns','ptr','hostname'])||'–';
+      const wan=findField(d,['wan_ip','dg_wan_ip','dg_ipv4','wan'])||'–';
+      const cid=findField(d,['customer_id','kundenid','kundennr','cid'])||'–';
+      const tot=e.trf?.totals||{};
+      const numCols=Object.keys(tot).filter(k=>typeof tot[k]==='number'||(typeof tot[k]==='string'&&!isNaN(+tot[k])&&tot[k]!==''));
+      const trfHtml=numCols.map(k=>`<div class="kfip-trf-cell"><span class="kfip-trf-n">${COL_L[k]||k.toUpperCase()}</span><span class="kfip-trf-v" style="color:${COL_C[k]||'#d9d9d9'}">${(+(tot[k]||0)).toFixed(k==='icmp'?3:2)} GB</span></div>`).join('');
+      return`<div class="kfip-ip-block">
+        <div class="kfip-ip-title"><span class="kfip-dot"></span><span class="kfip-ip-addr">${esc(ipS)}</span><span class="kfip-badge ${tp}">${tp==='dg'?'DG-Gateway':'OpenVPN'}</span></div>
+        <div class="kfip-dgrid">
+          <span class="kfip-dl">Feste-IP-ID</span><span class="kfip-dv">${esc(String(id))}</span>
+          <span class="kfip-dl">WAN-IP</span><span class="kfip-dv">${esc(wan)}</span>
+          <span class="kfip-dl">Reverse-DNS</span><span class="kfip-dv">${esc(rdns)}</span>
+          <span class="kfip-dl">Kunden-ID</span><span class="kfip-dv">${esc(String(cid))}</span>
+          <span class="kfip-dl">Status</span><span class="kfip-dv" style="color:#56b870;">Aktiv</span>
+        </div>
+        ${numCols.length?`<div class="kfip-trf-hd">Traffic · 30 Tage</div><div class="kfip-trf-grid">${trfHtml}</div>`:''}
+      </div>`;
+    }).join('');
+    const ts=document.getElementById('kfip-ts');
+    if(ts)ts.textContent='Stand: '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+  }
+
+  async function load(){
+    try{
+      data=await loadAll();
+      renderMini(data);
+      if(open)renderDetail(data);
+    }catch(e){
+      document.getElementById('kfip-mini').innerHTML=`<div class="kfip-mini-row" style="color:#d45555;">✗ ${esc(e.message)}</div>`;
+    }
+  }
+
+  function toggle(){
+    open=!open;
+    document.getElementById('kfip-body').style.display=open?'':'none';
+    const arr=document.getElementById('kfip-arrow');
+    arr.classList.toggle('open',open);
+    arr.textContent=open?'▴':'▾';
+    if(open&&data)renderDetail(data);
+  }
+
+  load();
+  setInterval(()=>{try{sessionStorage.removeItem(KEY);}catch(e){}load();},TTL);
+  return{toggle,refresh:load};
+})();
+</script>
+
+]]>
+</INLINE>
+</FILE>
+
 <FILE Run="/bin/bash">
 <INLINE>
 <![CDATA[
@@ -975,6 +1139,7 @@ PLUGIN_DIR="/usr/local/emhttp/plugins/kossmann-festeip-manager"
 CONFIG_DIR="/boot/config/plugins/kossmann-festeip-manager"
 chmod 644 "$PLUGIN_DIR/KossmannFesteIP.php"
 chmod 644 "$PLUGIN_DIR/KossmannFesteIP.page"
+chmod 644 "$PLUGIN_DIR/KossmannFesteIPDashboard.page"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$PLUGIN_DIR/images"
 echo "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" | base64 -d > "$PLUGIN_DIR/images/plugin-icon.png"
@@ -982,7 +1147,7 @@ chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 cp "$CONFIG_DIR/kossmann-festeip-manager.plg" "/boot/config/plugins/kossmann-festeip-manager.plg" 2>/dev/null || true
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.2.0 installiert      ║"
+echo "║  Kossmann Feste IP Manager v0.3.0 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
