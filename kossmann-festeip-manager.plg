@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.1.5">
+  <!ENTITY version   "0.1.6">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;"
@@ -14,14 +14,17 @@
         support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.1.6
+- Fix: Traffic-Tabelle erkennt Feldnamen automatisch (dateKey + numCols auto-detect)
+- Fix: Datum und ICMP-Text besser lesbar (hellere Farben)
+- Traffic-Graph 20% kleiner (80% Breite, zentriert)
+- Graph mit weißem Hintergrund-Padding für bessere Lesbarkeit
+
 ##0.1.5
-- Fix: IP-Adresse, RDNS, WAN-IP, Kunden-ID über robuste Feldsuche (findIp/findField)
-- Fix: Typ-Erkennung normalisiert (normalizeType – DG/OVPN unabhängig vom API-Wert)
-- Fix: Sidebar zeigt IP und korrekten Badge
+- findIp/findField/normalizeType Auto-Erkennung für alle Felder
 
 ##0.1.4
-- findId() Auto-Erkennung des ID-Feldes
-- Debug-Panel in der Übersicht
+- findId Auto-Erkennung + Debug-Panel
 
 ##0.1.3
 - Fix: find()-Vergleich auf String-Basis
@@ -38,7 +41,7 @@
 
 <!--
   ╔══════════════════════════════════════════════════════════════╗
-  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.5          ║
+  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.6       ║
   ╚══════════════════════════════════════════════════════════════╝
 -->
 
@@ -51,7 +54,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.1.5';
+const KFIP_VER        = '0.1.6';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -299,7 +302,7 @@ body{font-family:'Space Mono',monospace;background:var(--bg);color:var(--tx);dis
 .ktbl tr:hover td{background:#0c121966;}
 .tbar{height:5px;min-width:2px;background:linear-gradient(90deg,var(--cy),#00d4ff44);border-radius:2px;}
 
-.gfx-img{width:100%;border-radius:4px;display:block;}
+.gfx-img{width:80%;max-width:900px;border-radius:4px;display:block;margin:0 auto;}
 .gfx-ph{height:160px;display:flex;align-items:center;justify-content:center;background:var(--bg3);border-radius:4px;color:var(--dmr);font-size:11px;border:1px dashed var(--bd);gap:8px;}
 
 .ov-bg{display:none;position:fixed;inset:0;background:#00000090;z-index:999;align-items:center;justify-content:center;}
@@ -703,7 +706,7 @@ async function loadGraph() {
     if (res.error || !res.image) {
       w.innerHTML = `<div class="msg msg-err" style="margin:0;">✗ ${esc(res.message||'Graph nicht verfügbar')}</div>`;
     } else {
-      w.innerHTML = `<img class="gfx-img" src="${res.image}" alt="Traffic Graph"/>
+      w.innerHTML = `<img class="gfx-img" src="${res.image}" alt="Traffic Graph" style="background:#fff;padding:4px;"/>
         <div style="margin-top:4px;display:flex;justify-content:space-between;font-size:9px;color:var(--dmr);">
           <span>${esc(S.period==='1'?'Letzte 24h':S.period==='7'?'Letzte 7 Tage':'Letzte 30 Tage')}</span>
           <span>Heute</span>
@@ -720,43 +723,62 @@ async function loadTable() {
     const res = await call({action:'traffic_table', id:S.sel});
     const w = document.getElementById('tbl-wrap');
     if (!w) return;
-    if (res.error) {
-      w.innerHTML = `<div class="secb"><div class="msg msg-err">✗ ${esc(res.message||'Fehler')}</div></div>`;
-      return;
-    }
+    if (res.error) { w.innerHTML=`<div class="secb"><div class="msg msg-err">✗ ${esc(res.message||'Fehler')}</div></div>`; return; }
+
     const rows = Array.isArray(res.data) ? res.data : [];
     const tot  = res.totals || {};
-    const maxT = Math.max(...rows.map(r=>+(r.total||0)), 0.01);
+
+    if (!rows.length) { w.innerHTML='<div class="secb" style="color:var(--dmr);font-size:12px;">Keine Daten verfügbar.</div>'; return; }
+
+    // ── Datum-Feld auto-erkennen ──────────────────────────────────────────────
+    const firstRow = rows[0];
+    const dateKey  = ['date','datum','day','ts','time','created_at']
+                       .find(k => firstRow[k] != null)
+                     || Object.keys(firstRow).find(k => typeof firstRow[k]==='string' && /\d{4}-\d{2}-\d{2}/.test(firstRow[k]))
+                     || null;
+
+    // ── Numerische Spalten auto-erkennen ─────────────────────────────────────
+    const COL_META = {
+      tcp:{l:'TCP (GB)',   c:'var(--cy)'},
+      udp:{l:'UDP (GB)',   c:'var(--or)'},
+      icmp:{l:'ICMP (GB)',  c:'var(--tx)'},
+      ip: {l:'IP (GB)',    c:'var(--tx)'},
+      total:{l:'Gesamt (GB)',c:'var(--tx)'},
+      sum:  {l:'Gesamt (GB)',c:'var(--tx)'},
+    };
+    const numCols = Object.keys(firstRow).filter(k => {
+      if (k === dateKey) return false;
+      const v = firstRow[k];
+      return typeof v==='number' || (typeof v==='string' && v!=='' && !isNaN(+v));
+    });
+
+    // Fallback wenn gar nichts erkannt wird: bekannte Namen ausprobieren
+    const activeCols = numCols.length > 0 ? numCols : ['tcp','udp','icmp','total'];
+    const maxT = Math.max(...rows.map(r => Math.max(...activeCols.map(k => +(r[k]||0)))), 0.01);
+    const barCol = activeCols[0];
+
+    const thCells  = `${dateKey?'<th>Datum</th>':''}${activeCols.map(k=>`<th>${COL_META[k]?.l||k.toUpperCase()+' (GB)'}</th>`).join('')}<th></th>`;
+    const totCells = `
+      ${dateKey?'<td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;font-weight:700;">∑ Gesamt</td>':''}
+      ${activeCols.map(k=>`<td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;font-weight:700;">${(+(tot[k]||0)).toFixed(k==='icmp'?3:2)}</td>`).join('')}
+      <td style="border-top:1px solid var(--bd);background:#00d4ff08;"></td>`;
 
     w.innerHTML = `
       <table class="ktbl">
-        <thead><tr>
-          <th>Datum</th><th>TCP (GB)</th><th>UDP (GB)</th><th>ICMP (GB)</th><th>Gesamt (GB)</th><th></th>
-        </tr></thead>
+        <thead><tr>${thCells}</tr></thead>
         <tbody>
           ${rows.map(r=>`
             <tr>
-              <td style="color:var(--dm)">${esc(r.date||'')}</td>
-              <td style="color:var(--cy)">${(+(r.tcp||0)).toFixed(2)}</td>
-              <td style="color:var(--or)">${(+(r.udp||0)).toFixed(2)}</td>
-              <td style="color:var(--dmr)">${(+(r.icmp||0)).toFixed(3)}</td>
-              <td>${(+(r.total||0)).toFixed(2)}</td>
-              <td style="width:90px"><div class="tbar" style="width:${Math.max(2,(+(r.total||0)/maxT)*70)}px"></div></td>
+              ${dateKey?`<td style="color:var(--tx)">${esc(String(r[dateKey]||''))}</td>`:''}
+              ${activeCols.map(k=>`<td style="color:${COL_META[k]?.c||'var(--tx)'}">${(+(r[k]||0)).toFixed(k==='icmp'?3:2)}</td>`).join('')}
+              <td style="width:90px"><div class="tbar" style="width:${Math.max(2,(+(r[barCol]||0)/maxT)*70)}px"></div></td>
             </tr>`).join('')}
-          <tr style="font-weight:700;">
-            <td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;">∑ Gesamt</td>
-            <td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;">${(+(tot.tcp||0)).toFixed(2)}</td>
-            <td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;">${(+(tot.udp||0)).toFixed(2)}</td>
-            <td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;">${(+(tot.icmp||0)).toFixed(3)}</td>
-            <td style="color:var(--cy);border-top:1px solid var(--bd);background:#00d4ff08;">${(+(tot.total||0)).toFixed(2)}</td>
-            <td style="border-top:1px solid var(--bd);background:#00d4ff08;"></td>
-          </tr>
+          <tr>${totCells}</tr>
         </tbody>
-      </table>
-    `;
+      </table>`;
   } catch(e) {
     const w = document.getElementById('tbl-wrap');
-    if (w) w.innerHTML = `<div class="secb"><div class="msg msg-err">✗ ${esc(e.message)}</div></div>`;
+    if (w) w.innerHTML=`<div class="secb"><div class="msg msg-err">✗ ${esc(e.message)}</div></div>`;
   }
 }
 
@@ -972,7 +994,8 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAiEklEQVR4nO3dP29cR5ov4GrPRB
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.1.5 installiert    ║"
+echo "║  Kossmann Feste IP Manager v0.1.6 installiert    ║"
+echo "║  Browser neu laden  →  Utilities → Kossmann        ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
