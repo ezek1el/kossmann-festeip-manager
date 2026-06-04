@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.1.6">
+  <!ENTITY version   "0.1.7">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;"
@@ -14,14 +14,17 @@
         support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.1.7
+- Fix: Versions-Stub auf /boot/config/plugins/ – Unraid Update-Check funktioniert jetzt
+- Install-Script: redundante Echo-Zeile entfernt
+
 ##0.1.6
-- Fix: Traffic-Tabelle erkennt Feldnamen automatisch (dateKey + numCols auto-detect)
-- Fix: Datum und ICMP-Text besser lesbar (hellere Farben)
-- Traffic-Graph 20% kleiner (80% Breite, zentriert)
-- Graph mit weißem Hintergrund-Padding für bessere Lesbarkeit
+- Fix: Traffic-Tabelle erkennt Feldnamen automatisch
+- Traffic-Graph 20% kleiner, weißes Padding
+- Datum und ICMP-Text besser lesbar
 
 ##0.1.5
-- findIp/findField/normalizeType Auto-Erkennung für alle Felder
+- findIp/findField/normalizeType Auto-Erkennung
 
 ##0.1.4
 - findId Auto-Erkennung + Debug-Panel
@@ -39,12 +42,24 @@
 - Initiales Release
 </CHANGES>
 
-<!--
-  ╔══════════════════════════════════════════════════════════════╗
-  ║  KOSSMANN FESTE IP MANAGER  –  Unraid Plugin v0.1.6       ║
-  ╚══════════════════════════════════════════════════════════════╝
--->
+<!-- ── Versions-Stub: wird auf Flash gespeichert damit Unraid Updates erkennt ── -->
+<FILE Name="/boot/config/plugins/&name;/&name;.plg">
+<INLINE>
+<![CDATA[
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "kossmann-festeip-manager">
+  <!ENTITY author    "ezek1el3000">
+  <!ENTITY version   "0.1.7">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager.plg">
+]>
+<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;"
+        min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues"/>
+]]>
+</INLINE>
+</FILE>
 
+<!-- ── Haupt-PHP-Applikation ── -->
 <FILE Name="/usr/local/emhttp/plugins/&name;/KossmannFesteIP.php">
 <INLINE>
 <![CDATA[
@@ -54,7 +69,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.1.6';
+const KFIP_VER        = '0.1.7';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -948,6 +963,7 @@ return { init, reload, selectIP, setTab, setPeriod, submitRdns, scanPort, quickP
 </INLINE>
 </FILE>
 
+<!-- ── Unraid Menüeintrag ── -->
 <FILE Name="/usr/local/emhttp/plugins/&name;/KossmannFesteIP.page">
 <INLINE>
 <![CDATA[
@@ -979,6 +995,7 @@ $pluginDir = '/usr/local/emhttp/plugins/kossmann-festeip-manager';
 </INLINE>
 </FILE>
 
+<!-- ── Installations-Script ── -->
 <FILE Run="/bin/bash">
 <INLINE>
 <![CDATA[
@@ -994,13 +1011,14 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAiEklEQVR4nO3dP29cR5ov4GrPRB
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.1.6 installiert    ║"
+echo "║  Kossmann Feste IP Manager v0.1.7 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
 </INLINE>
 </FILE>
 
+<!-- ── Deinstallations-Script ── -->
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
 <![CDATA[
