@@ -987,7 +987,7 @@ chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 cp "$CONFIG_DIR/kossmann-festeip-manager.plg" "/boot/config/plugins/kossmann-festeip-manager.plg" 2>/dev/null || true
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.2.0 installiert   ║"
+echo "║  Kossmann Feste IP Manager v0.2.0 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
