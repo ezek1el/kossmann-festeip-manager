@@ -2,18 +2,23 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.3.2">
+  <!ENTITY version   "0.3.3">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;"
         icon="images/plugin-icon.png" min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.3.3
+- Fix: Dashboard-Karte nutzt jetzt Menu="Dashboard:0" (Unraid 7.x Schema statt Type="widg")
+- Cond-Versionscheck wie native Plugins
+- return; durch if/else ersetzt
+
 ##0.3.2
-- Fix: pluginURL korrigiert (ezek1el + refs/heads/main)
+- Fix: pluginURL korrigiert
 
 ##0.3.1
-- Fix: Dashboard-Header, Einstellungen (Refresh+Zeitraum), VERSION_STUB
+- Dashboard-Einstellungen (Refresh+Zeitraum)
 
 ##0.3.0
 - Dashboard-Karte
@@ -29,12 +34,8 @@
 <INLINE>
 <![CDATA[
 <?xml version='1.0' standalone='yes'?>
-<PLUGIN name="kossmann-festeip-manager"
-        author="ezek1el3000"
-        version="0.3.2"
-        pluginURL="https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg"
-        min="6.12"
-        support="https://github.com/ezek1el/kossmann-festeip-manager/issues"/>
+<PLUGIN name="kossmann-festeip-manager" author="ezek1el3000" version="0.3.3" pluginURL="https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg"
+        min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues"/>
 ]]>
 </INLINE>
 </FILE>
@@ -48,7 +49,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.3.2';
+const KFIP_VER        = '0.3.3';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -974,17 +975,20 @@ $pluginDir = '/usr/local/emhttp/plugins/kossmann-festeip-manager';
 <FILE Name="/usr/local/emhttp/plugins/&name;/KossmannFesteIPDashboard.page">
 <INLINE>
 <![CDATA[
-Type="widg"
+Menu="Dashboard:0"
 Title="Kossmann Feste IP"
 Icon="images/plugin-icon.png"
+Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.11.9','>')"
 ---
 <?php
 $cfg = @json_decode(@file_get_contents('/boot/config/plugins/kossmann-festeip-manager/config.json') ?: '{}', true);
-if (empty($cfg['customer_id']) || empty($cfg['password'])) { ?>
+$kfip_configured = !empty($cfg['customer_id']) && !empty($cfg['password']);
+?>
+<?php if (!$kfip_configured): ?>
 <div style="padding:8px 10px;font-size:12px;color:#7e8286;font-family:Arial,sans-serif;">
   Kossmann Feste IP: Bitte <a href="/plugins/kossmann-festeip-manager/KossmannFesteIP.php" style="color:#1d9ac7;">Zugangsdaten konfigurieren</a>
 </div>
-<?php return; } ?>
+<?php else: ?>
 <style>
 #kfip-dc{font-family:'Roboto',Arial,sans-serif;font-size:12px;color:#d9d9d9;border:1px solid #383a3f;border-radius:4px;overflow:hidden;margin:2px 0 6px;}
 .kfip-hd{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:#222428;cursor:pointer;user-select:none;}
@@ -1218,6 +1222,7 @@ const kfipDash = (() => {
   return{toggle,toggleSettings,saveSetting,refresh:load};
 })();
 </script>
+<?php endif; ?>
 
 ]]>
 </INLINE>
@@ -1240,7 +1245,7 @@ chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 cp "$CONFIG_DIR/kossmann-festeip-manager.plg" "/boot/config/plugins/kossmann-festeip-manager.plg" 2>/dev/null || true
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.3.2 installiert      ║"
+echo "║  Kossmann Feste IP Manager v0.3.3 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
