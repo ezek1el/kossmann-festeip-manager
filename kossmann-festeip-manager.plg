@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.1.7">
+  <!ENTITY version   "0.1.8">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;"
@@ -14,35 +14,29 @@
         support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.1.8
+- Texte aufgehellt: Subtitel, Sidebar-Header, Tabellen-Header, RDNS, Info-Labels, Graph-Zeitraum
+- Grüne Statuspunkte entfernt (Header, Sidebar, Content)
+- Fix: Kunden-ID im Header via findField erkannt
+- TCP/UDP Legende: echte farbige Linien statt Striche
+
 ##0.1.7
-- Fix: Versions-Stub auf /boot/config/plugins/ – Unraid Update-Check funktioniert jetzt
-- Install-Script: redundante Echo-Zeile entfernt
+- Fix: Versions-Stub auf /boot – Unraid Update-Check
 
 ##0.1.6
-- Fix: Traffic-Tabelle erkennt Feldnamen automatisch
-- Traffic-Graph 20% kleiner, weißes Padding
-- Datum und ICMP-Text besser lesbar
+- Fix: Traffic-Tabelle Feldnamen auto-detect
+- Graph 20% kleiner
 
 ##0.1.5
-- findIp/findField/normalizeType Auto-Erkennung
+- findIp/findField/normalizeType
 
 ##0.1.4
-- findId Auto-Erkennung + Debug-Panel
+- findId + Debug-Panel
 
-##0.1.3
-- Fix: find()-Vergleich auf String-Basis
-
-##0.1.2
-- Fix: DG-WAN-IP Action dgwan_manage
-
-##0.1.1
-- Feste-IP-ID in Übersicht
-
-##0.1.0
-- Initiales Release
+##0.1.0–0.1.3
+- Initiales Release + Bugfixes
 </CHANGES>
 
-<!-- ── Versions-Stub: wird auf Flash gespeichert damit Unraid Updates erkennt ── -->
 <FILE Name="/boot/config/plugins/&name;/&name;.plg">
 <INLINE>
 <![CDATA[
@@ -50,7 +44,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.1.7">
+  <!ENTITY version   "0.1.8">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el3000/kossmann-festeip-manager/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;"
@@ -59,7 +53,6 @@
 </INLINE>
 </FILE>
 
-<!-- ── Haupt-PHP-Applikation ── -->
 <FILE Name="/usr/local/emhttp/plugins/&name;/KossmannFesteIP.php">
 <INLINE>
 <![CDATA[
@@ -69,7 +62,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.1.7';
+const KFIP_VER        = '0.1.8';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -248,19 +241,19 @@ body{font-family:'Space Mono',monospace;background:var(--bg);color:var(--tx);dis
 .hdr::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cy),var(--or),transparent);}
 .logo-box{width:34px;height:34px;border:1.5px solid var(--cy);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--cy);font-size:17px;box-shadow:0 0 16px var(--cyd);}
 .logo-t{font-size:12px;font-weight:700;letter-spacing:.14em;color:var(--cy);}
-.logo-s{font-size:9px;color:var(--dm);letter-spacing:.2em;}
+.logo-s{font-size:9px;color:#7a9eb0;letter-spacing:.2em;}
 
 .main{display:grid;grid-template-columns:260px 1fr;flex:1;overflow:hidden;min-height:0;}
 
 .sb{background:var(--bg2);border-right:1px solid var(--bd);overflow-y:auto;padding:10px 6px;}
-.sb-hd{padding:6px 10px 10px;font-size:9px;letter-spacing:.22em;color:var(--dmr);text-transform:uppercase;}
+.sb-hd{padding:6px 10px 10px;font-size:9px;letter-spacing:.22em;color:var(--dm);text-transform:uppercase;}
 .ipc{padding:9px 10px;border-radius:5px;cursor:pointer;border:1px solid transparent;margin-bottom:3px;transition:all .12s;}
 .ipc:hover{background:#00d4ff06;}
 .ipc.active{background:var(--cyd);border-color:#00d4ff44;box-shadow:0 0 14px var(--cyd);}
 .ipc .ip-a{font-size:13px;font-weight:700;letter-spacing:.04em;color:white;}
 .ipc.active .ip-a{color:var(--cy);}
 .ip-lb{font-size:11px;color:var(--dm);padding-left:13px;}
-.ip-rd{font-size:10px;color:var(--dmr);padding-left:13px;margin-top:2px;}
+.ip-rd{font-size:10px;color:#5a7a8a;padding-left:13px;margin-top:2px;}
 
 .badge{font-size:9px;padding:2px 6px;border-radius:3px;letter-spacing:.12em;text-transform:uppercase;border:1px solid;margin-left:auto;}
 .badge.dg{background:var(--cyd);color:var(--cy);border-color:#00d4ff44;}
@@ -279,7 +272,7 @@ body{font-family:'Space Mono',monospace;background:var(--bg);color:var(--tx);dis
 
 .igrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:7px;overflow:hidden;margin-bottom:16px;}
 .icell{background:var(--bg2);padding:12px 14px;}
-.ilbl{font-size:9px;letter-spacing:.18em;color:var(--dmr);text-transform:uppercase;margin-bottom:3px;}
+.ilbl{font-size:9px;letter-spacing:.18em;color:var(--dm);text-transform:uppercase;margin-bottom:3px;}
 .ival{font-size:13px;font-weight:700;word-break:break-all;}
 
 .sec{background:var(--bg2);border:1px solid var(--bd);border-radius:7px;margin-bottom:14px;overflow:hidden;}
@@ -312,7 +305,7 @@ body{font-family:'Space Mono',monospace;background:var(--bg);color:var(--tx);dis
 .msg-inf{background:var(--cyd);border:1px solid #00d4ff30;color:var(--cy);}
 
 .ktbl{width:100%;border-collapse:collapse;font-size:12px;}
-.ktbl th{padding:8px 12px;text-align:left;color:var(--dmr);font-size:9px;letter-spacing:.12em;text-transform:uppercase;border-bottom:1px solid var(--bd);font-weight:700;background:var(--bg2);white-space:nowrap;}
+.ktbl th{padding:8px 12px;text-align:left;color:var(--dm);font-size:9px;letter-spacing:.12em;text-transform:uppercase;border-bottom:1px solid var(--bd);font-weight:700;background:var(--bg2);white-space:nowrap;}
 .ktbl td{padding:5px 12px;border-bottom:1px solid #1c2a3a22;}
 .ktbl tr:hover td{background:#0c121966;}
 .tbar{height:5px;min-width:2px;background:linear-gradient(90deg,var(--cy),#00d4ff44);border-radius:2px;}
@@ -447,7 +440,7 @@ function setStatus(state, msg='') {
   if (state === null) {
     el.innerHTML = '<span class="spin"></span>';
   } else if (state) {
-    el.innerHTML = `<span style="display:flex;align-items:center;gap:6px;color:var(--gn)"><span class="dot"></span>Verbunden · Kunde ${esc(msg)}</span>`;
+    el.innerHTML = `<span style="color:var(--gn);font-size:11px;">● Verbunden · Kunde ${esc(msg)}</span>`;
   } else {
     el.innerHTML = `<span style="color:var(--rd);font-size:11px;">✗ ${esc(msg||'Fehler')}</span>`;
   }
@@ -494,7 +487,7 @@ async function loadList() {
     if (res.error) { setStatus(false, res.message||'API-Fehler'); return; }
     S.ips = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);
     S.rawList = res;
-    const firstCid = S.ips[0]?.customer_id || '';
+    const firstCid = findField(S.ips[0],['customer_id','kundenid','kundennr','cid','customer_nr','kdnr']) || '';
     setStatus(true, firstCid || '–');
     renderSidebar();
     if (S.ips.length > 0) selectIP(findId(S.ips[0]));
@@ -513,7 +506,6 @@ function renderSidebar() {
     return `
     <div class="ipc${String(_id)===String(S.sel)?' active':''}" onclick="kfip.selectIP('${_id}')">
       <div class="fl fla flg8 mb10" style="margin-bottom:3px;">
-        <span class="dot"></span>
         <span class="ip-a">${esc(_ip)}</span>
         <span class="badge ${_tp==='dg'?'dg':'ov'}">${_tp==='dg'?'DG':'OVPN'}</span>
       </div>
@@ -557,7 +549,6 @@ function renderContent() {
   document.getElementById('content-area').innerHTML = `
     <div class="chd">
       <div class="fl fla flg12 mb16">
-        <span class="dot"></span>
         <span style="font-size:20px;font-weight:700;color:white;letter-spacing:.04em;">${esc(ip.ip||d.ip||'')}</span>
         <span class="badge ${tp==='dg'?'dg':'ov'}" style="font-size:10px;padding:3px 8px;">
           ${tp==='dg'?'DG-Gateway':'OpenVPN'}
@@ -696,7 +687,7 @@ async function renderTraffic() {
     <div class="sec mb14">
       <div class="sechd">
         <span>◈ &nbsp;Traffic-Graph · ${pLabel[S.period]}</span>
-        <span style="font-size:9px;opacity:.8;"><span style="color:var(--cy)">── TCP</span>&nbsp;&nbsp;<span style="color:var(--or)">--- UDP</span></span>
+        <span style="font-size:9px;display:inline-flex;align-items:center;gap:10px;"><span style="display:inline-flex;align-items:center;gap:5px;color:var(--cy);"><span style="display:inline-block;width:18px;height:2px;background:var(--cy);border-radius:1px;"></span>TCP</span><span style="display:inline-flex;align-items:center;gap:5px;color:var(--or);"><span style="display:inline-block;width:18px;height:0;border-top:2px dashed var(--or);"></span>UDP</span></span>
       </div>
       <div style="padding:12px 16px 8px;">
         <div id="graph-wrap"><div class="gfx-ph"><span class="spin"></span>Lade Graph…</div></div>
@@ -722,7 +713,7 @@ async function loadGraph() {
       w.innerHTML = `<div class="msg msg-err" style="margin:0;">✗ ${esc(res.message||'Graph nicht verfügbar')}</div>`;
     } else {
       w.innerHTML = `<img class="gfx-img" src="${res.image}" alt="Traffic Graph" style="background:#fff;padding:4px;"/>
-        <div style="margin-top:4px;display:flex;justify-content:space-between;font-size:9px;color:var(--dmr);">
+        <div style="margin-top:4px;display:flex;justify-content:space-between;font-size:9px;color:var(--dm);">
           <span>${esc(S.period==='1'?'Letzte 24h':S.period==='7'?'Letzte 7 Tage':'Letzte 30 Tage')}</span>
           <span>Heute</span>
         </div>`;
@@ -963,7 +954,6 @@ return { init, reload, selectIP, setTab, setPeriod, submitRdns, scanPort, quickP
 </INLINE>
 </FILE>
 
-<!-- ── Unraid Menüeintrag ── -->
 <FILE Name="/usr/local/emhttp/plugins/&name;/KossmannFesteIP.page">
 <INLINE>
 <![CDATA[
@@ -995,7 +985,6 @@ $pluginDir = '/usr/local/emhttp/plugins/kossmann-festeip-manager';
 </INLINE>
 </FILE>
 
-<!-- ── Installations-Script ── -->
 <FILE Run="/bin/bash">
 <INLINE>
 <![CDATA[
@@ -1011,14 +1000,13 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAiEklEQVR4nO3dP29cR5ov4GrPRB
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.1.7 installiert      ║"
+echo "║  Kossmann Feste IP Manager v0.1.8 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
 </INLINE>
 </FILE>
 
-<!-- ── Deinstallations-Script ── -->
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
 <![CDATA[
