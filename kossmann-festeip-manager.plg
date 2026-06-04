@@ -2,26 +2,21 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.3.3">
+  <!ENTITY version   "0.3.4">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;"
         icon="images/plugin-icon.png" min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.3.4
+- Fix: Dashboard-Tile über $mytiles + &lt;tbody&gt; registriert (Unraid 7.x Schema wie Tailscale)
+
 ##0.3.3
-- Fix: Dashboard-Karte nutzt jetzt Menu="Dashboard:0" (Unraid 7.x Schema statt Type="widg")
-- Cond-Versionscheck wie native Plugins
-- return; durch if/else ersetzt
+- Menu="Dashboard:0" statt Type="widg"
 
-##0.3.2
-- Fix: pluginURL korrigiert
-
-##0.3.1
-- Dashboard-Einstellungen (Refresh+Zeitraum)
-
-##0.3.0
-- Dashboard-Karte
+##0.3.0–0.3.2
+- Dashboard-Karte, Einstellungen, pluginURL-Fix
 
 ##0.2.0
 - Farbpalette Unraid, Icon Globus+K
@@ -34,7 +29,7 @@
 <INLINE>
 <![CDATA[
 <?xml version='1.0' standalone='yes'?>
-<PLUGIN name="kossmann-festeip-manager" author="ezek1el3000" version="0.3.3" pluginURL="https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg"
+<PLUGIN name="kossmann-festeip-manager" author="ezek1el3000" version="0.3.4" pluginURL="https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg"
         min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues"/>
 ]]>
 </INLINE>
@@ -49,7 +44,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.3.3';
+const KFIP_VER        = '0.3.4';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -975,85 +970,69 @@ $pluginDir = '/usr/local/emhttp/plugins/kossmann-festeip-manager';
 <FILE Name="/usr/local/emhttp/plugins/&name;/KossmannFesteIPDashboard.page">
 <INLINE>
 <![CDATA[
-Menu="Dashboard:0"
-Title="Kossmann Feste IP"
-Icon="images/plugin-icon.png"
 Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.11.9','>')"
+Menu="Dashboard:0"
 ---
 <?php
 $cfg = @json_decode(@file_get_contents('/boot/config/plugins/kossmann-festeip-manager/config.json') ?: '{}', true);
 $kfip_configured = !empty($cfg['customer_id']) && !empty($cfg['password']);
+
+ob_start();
 ?>
+<tbody title="Kossmann Feste IP">
+<tr><td>
 <?php if (!$kfip_configured): ?>
-<div style="padding:8px 10px;font-size:12px;color:#7e8286;font-family:Arial,sans-serif;">
-  Kossmann Feste IP: Bitte <a href="/plugins/kossmann-festeip-manager/KossmannFesteIP.php" style="color:#1d9ac7;">Zugangsdaten konfigurieren</a>
-</div>
+  <div style="padding:8px 4px;font-size:12px;color:#7e8286;">
+    Bitte <a href="/plugins/kossmann-festeip-manager/KossmannFesteIP.php" style="color:#1d9ac7;">Zugangsdaten konfigurieren</a>
+  </div>
 <?php else: ?>
 <style>
-#kfip-dc{font-family:'Roboto',Arial,sans-serif;font-size:12px;color:#d9d9d9;border:1px solid #383a3f;border-radius:4px;overflow:hidden;margin:2px 0 6px;}
-.kfip-hd{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:#222428;cursor:pointer;user-select:none;}
-.kfip-hd-l{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;}
-.kfip-arr{font-size:11px;color:#7e8286;transition:transform .2s;margin-left:8px;}
-.kfip-arr.open{transform:rotate(180deg);}
-.kfip-mini-row{display:flex;align-items:center;gap:6px;padding:5px 10px;background:#1c1d21;border-top:1px solid #2e3035;}
+#kfip-dc{font-family:'Roboto',Arial,sans-serif;font-size:12px;color:#d9d9d9;}
+.kfip-mini-row{display:flex;align-items:center;gap:6px;padding:4px 2px;}
 .kfip-mini-ip{font-family:monospace;color:#1d9ac7;font-weight:700;}
 .kfip-badge{font-size:9px;padding:1px 5px;border-radius:3px;text-transform:uppercase;font-weight:700;}
 .kfip-badge.dg{background:#1d9ac718;color:#1d9ac7;border:1px solid #1d9ac744;}
 .kfip-badge.ov{background:#e69b1e18;color:#e69b1e;border:1px solid #e69b1e44;}
 .kfip-mini-trf{margin-left:auto;color:#7e8286;font-size:11px;}
-.kfip-body{background:#1c1d21;border-top:1px solid #383a3f;}
-.kfip-ip-block{padding:10px;border-bottom:1px solid #2e3035;}
-.kfip-ip-title{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+.kfip-body{margin-top:4px;border-top:1px solid #2e3035;padding-top:4px;}
+.kfip-ip-block{padding:6px 2px;border-bottom:1px solid #2e3035;}
+.kfip-ip-title{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
 .kfip-ip-addr{font-family:monospace;color:#1d9ac7;font-weight:700;font-size:13px;}
 .kfip-dgrid{display:grid;grid-template-columns:90px 1fr;gap:2px 8px;margin-bottom:6px;}
-.kfip-dl{color:#7e8286;font-size:10px;text-transform:uppercase;letter-spacing:.1em;padding:1px 0;}
-.kfip-dv{color:#d9d9d9;font-family:monospace;font-size:11px;word-break:break-all;padding:1px 0;}
-.kfip-trf-hd{font-size:10px;color:#7e8286;text-transform:uppercase;letter-spacing:.1em;margin:6px 0 4px;}
+.kfip-dl{color:#7e8286;font-size:10px;text-transform:uppercase;letter-spacing:.08em;}
+.kfip-dv{color:#d9d9d9;font-family:monospace;font-size:11px;word-break:break-all;}
+.kfip-trf-hd{font-size:10px;color:#7e8286;text-transform:uppercase;letter-spacing:.08em;margin:4px 0;}
 .kfip-trf-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:3px;}
-.kfip-trf-cell{background:#222428;border-radius:3px;padding:4px 7px;display:flex;justify-content:space-between;}
+.kfip-trf-cell{background:#222428;border-radius:3px;padding:3px 6px;display:flex;justify-content:space-between;}
 .kfip-trf-n{color:#7e8286;font-size:10px;}
 .kfip-trf-v{font-size:11px;font-weight:600;}
-.kfip-foot{padding:5px 10px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #2e3035;gap:8px;}
+.kfip-foot{display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding-top:4px;border-top:1px solid #2e3035;}
 .kfip-link{color:#1d9ac7;text-decoration:none;font-size:11px;}
-.kfip-link:hover{text-decoration:underline;}
 .kfip-dot{width:6px;height:6px;border-radius:50%;background:#56b870;display:inline-block;flex-shrink:0;}
-.kfip-sel{background:#222428;border:1px solid #383a3f;border-radius:3px;color:#d9d9d9;font-size:10px;padding:2px 4px;cursor:pointer;}
-.kfip-settings-row{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#222428;border-top:1px solid #2e3035;font-size:11px;color:#7e8286;}
+.kfip-sel{background:#222428;border:1px solid #383a3f;border-radius:3px;color:#d9d9d9;font-size:10px;padding:1px 3px;cursor:pointer;}
+.kfip-tog{cursor:pointer;color:#7e8286;font-size:11px;user-select:none;}
+.kfip-tog:hover{color:#1d9ac7;}
 </style>
-
 <div id="kfip-dc">
-  <div class="kfip-hd" onclick="kfipDash.toggle()">
-    <div class="kfip-hd-l">
-      <img src="/plugins/kossmann-festeip-manager/images/plugin-icon.png" width="18" height="18" style="border-radius:3px;">
-      Kossmann Feste IP
-    </div>
-    <div style="display:flex;align-items:center;gap:6px;">
-      <span id="kfip-ts" style="font-size:10px;color:#555759;"></span>
-      <span id="kfip-cfg-btn" onclick="event.stopPropagation();kfipDash.toggleSettings()" style="cursor:pointer;color:#555759;font-size:13px;padding:0 2px;" title="Einstellungen">⚙</span>
-      <span class="kfip-arr" id="kfip-arrow">▾</span>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+    <span id="kfip-ts" style="font-size:10px;color:#555759;"></span>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span class="kfip-tog" onclick="kfipDash.toggleSettings()">⚙</span>
+      <span class="kfip-tog" id="kfip-arrow" onclick="kfipDash.toggle()">▾ Details</span>
     </div>
   </div>
-
-  <!-- Einstellungen (hidden) -->
-  <div class="kfip-settings-row" id="kfip-settings" style="display:none;">
+  <div id="kfip-settings" style="display:none;margin-bottom:6px;font-size:11px;color:#7e8286;">
     Refresh:
     <select class="kfip-sel" id="kfip-ref-sel" onchange="kfipDash.saveSetting('refresh',this.value)">
-      <option value="5">5 Min</option>
-      <option value="15">15 Min</option>
-      <option value="30">30 Min</option>
-      <option value="60">60 Min</option>
+      <option value="5">5 Min</option><option value="15">15 Min</option>
+      <option value="30">30 Min</option><option value="60">60 Min</option>
     </select>
-    &nbsp;Traffic:
+    Traffic:
     <select class="kfip-sel" id="kfip-per-sel" onchange="kfipDash.saveSetting('period',this.value)">
-      <option value="7">7 Tage</option>
-      <option value="30">30 Tage</option>
+      <option value="7">7 Tage</option><option value="30">30 Tage</option>
     </select>
   </div>
-
-  <!-- Collapsed: Mini-Zeilen pro IP -->
   <div id="kfip-mini"><div class="kfip-mini-row" style="color:#7e8286;font-style:italic;">Lade…</div></div>
-
-  <!-- Expanded: Detailansicht -->
   <div class="kfip-body" id="kfip-body" style="display:none;">
     <div id="kfip-detail"></div>
     <div class="kfip-foot">
@@ -1062,167 +1041,57 @@ $kfip_configured = !empty($cfg['customer_id']) && !empty($cfg['password']);
     </div>
   </div>
 </div>
-
 <script>
-const kfipDash = (() => {
-  const API      = '/plugins/kossmann-festeip-manager/KossmannFesteIP.php';
-  const CACHE    = 'kfip_dc_cache';
-  const SKEY     = 'kfip_dc_settings';
+if (typeof kfipDash === 'undefined') { window.kfipDash = (() => {
+  const API='/plugins/kossmann-festeip-manager/KossmannFesteIP.php';
+  const CACHE='kfip_dc_cache', SKEY='kfip_dc_settings';
   let open=false, settingsOpen=false, data=null, timer=null;
 
-  // ── Einstellungen ────────────────────────────────────────────────────────
-  function getSettings(){
-    try{return Object.assign({refresh:15,period:7},JSON.parse(localStorage.getItem(SKEY)||'{}'));}
-    catch(e){return{refresh:15,period:7};}
-  }
-  function applySettingsUI(){
-    const s=getSettings();
-    const rs=document.getElementById('kfip-ref-sel');
-    const ps=document.getElementById('kfip-per-sel');
-    if(rs)rs.value=String(s.refresh);
-    if(ps)ps.value=String(s.period);
-  }
-  function saveSetting(k,v){
-    const s=getSettings();s[k]=parseInt(v);
-    localStorage.setItem(SKEY,JSON.stringify(s));
-    clearInterval(timer);
-    try{sessionStorage.removeItem(CACHE);}catch(e){}
-    load();
-    startTimer();
-  }
-  function toggleSettings(){
-    settingsOpen=!settingsOpen;
-    document.getElementById('kfip-settings').style.display=settingsOpen?'':'none';
-    if(settingsOpen)applySettingsUI();
-  }
+  function getSettings(){try{return Object.assign({refresh:15,period:7},JSON.parse(localStorage.getItem(SKEY)||'{}'));}catch(e){return{refresh:15,period:7};}}
+  function applyUI(){const s=getSettings();const r=document.getElementById('kfip-ref-sel'),p=document.getElementById('kfip-per-sel');if(r)r.value=String(s.refresh);if(p)p.value=String(s.period);}
+  function saveSetting(k,v){const s=getSettings();s[k]=parseInt(v);localStorage.setItem(SKEY,JSON.stringify(s));clearInterval(timer);try{sessionStorage.removeItem(CACHE+'_7');sessionStorage.removeItem(CACHE+'_30');}catch(e){}load();startTimer();}
+  function toggleSettings(){settingsOpen=!settingsOpen;document.getElementById('kfip-settings').style.display=settingsOpen?'':'none';if(settingsOpen)applyUI();}
 
-  // ── Hilfsfunktionen ──────────────────────────────────────────────────────
   function esc(s){const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML;}
   function findId(o){if(!o)return null;if(o.id!=null&&o.id!=='')return o.id;for(const[k,v]of Object.entries(o)){if(/(^|_)id($|_)/i.test(k)&&(typeof v==='number'||(typeof v==='string'&&v!=='')))return v;}return null;}
   function findIp(o){if(!o)return null;const rx=/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;for(const k of['ip','ipv4','ip_address','address']){if(o[k]&&rx.test(String(o[k])))return o[k];}for(const[,v]of Object.entries(o)){if(typeof v==='string'&&rx.test(v))return v;}return null;}
   function findField(o,ks){if(!o)return null;for(const k of ks)if(o[k]!=null&&o[k]!=='')return o[k];return null;}
   function normType(t){return(!t||/dg|gate/i.test(String(t)))?'dg':'ov';}
 
-  async function call(p){
-    const r=await fetch(`${API}?api=1&${new URLSearchParams(p)}`);
-    const t=await r.text();
-    if(!t.trim())throw new Error(`HTTP ${r.status}`);
-    return JSON.parse(t);
-  }
+  async function call(p){const r=await fetch(`${API}?api=1&${new URLSearchParams(p)}`);const t=await r.text();if(!t.trim())throw new Error(`HTTP ${r.status}`);return JSON.parse(t);}
 
-  // ── Daten laden ──────────────────────────────────────────────────────────
   async function loadAll(){
-    const{period}=getSettings();
-    const cacheKey=`${CACHE}_${period}`;
-    const ttl=getSettings().refresh*60*1000;
-    try{const c=JSON.parse(sessionStorage.getItem(cacheKey)||'null');if(c&&Date.now()-c.ts<ttl)return c.data;}catch(e){}
+    const{period,refresh}=getSettings();const ck=CACHE+'_'+period;const ttl=refresh*60*1000;
+    try{const c=JSON.parse(sessionStorage.getItem(ck)||'null');if(c&&Date.now()-c.ts<ttl)return c.data;}catch(e){}
     const list=await call({action:'list'});
     const ips=Array.isArray(list.data)?list.data:(Array.isArray(list)?list:[]);
-    const entries=await Promise.all(ips.map(async ip=>{
-      const id=findId(ip);
-      try{
-        const[det,trf]=await Promise.all([
-          call({action:'details',id}),
-          call({action:'traffic_table',id}),
-        ]);
-        return{ip,det:det.data||det,trf};
-      }catch(e){return{ip,det:null,trf:null};}
-    }));
-    try{sessionStorage.setItem(cacheKey,JSON.stringify({ts:Date.now(),data:entries}));}catch(e){}
+    const entries=await Promise.all(ips.map(async ip=>{const id=findId(ip);try{const[det,trf]=await Promise.all([call({action:'details',id}),call({action:'traffic_table',id})]);return{ip,det:det.data||det,trf};}catch(e){return{ip,det:null,trf:null};}}));
+    try{sessionStorage.setItem(ck,JSON.stringify({ts:Date.now(),data:entries}));}catch(e){}
     return entries;
   }
 
-  // ── Rendering ────────────────────────────────────────────────────────────
-  const COL_L={tcp:'TCP',udp:'UDP',icmp:'ICMP',ip:'IP',total:'Gesamt',sum:'Gesamt'};
-  const COL_C={tcp:'#1d9ac7',udp:'#e69b1e',icmp:'#7e8286',ip:'#d9d9d9',total:'#56b870',sum:'#56b870'};
+  const CL={tcp:'TCP',udp:'UDP',icmp:'ICMP',ip:'IP',total:'Gesamt',sum:'Gesamt'};
+  const CC={tcp:'#1d9ac7',udp:'#e69b1e',icmp:'#7e8286',ip:'#d9d9d9',total:'#56b870',sum:'#56b870'};
+  function tot(trf){if(!trf)return{cols:[],t:{}};const t=trf.totals||{};const cols=Object.keys(t).filter(k=>typeof t[k]==='number'||(typeof t[k]==='string'&&!isNaN(+t[k])&&t[k]!==''));return{cols,t};}
 
-  function getTotals(trf){
-    if(!trf)return{cols:[],tot:{}};
-    const tot=trf.totals||{};
-    const cols=Object.keys(tot).filter(k=>typeof tot[k]==='number'||(typeof tot[k]==='string'&&!isNaN(+tot[k])&&tot[k]!==''));
-    return{cols,tot};
-  }
+  function renderMini(e){const{period}=getSettings();document.getElementById('kfip-mini').innerHTML=e.length?e.map(x=>{const ip=findIp(x.det)||findIp(x.ip)||'–';const tp=normType((x.det||x.ip||{}).type);const{cols,t}=tot(x.trf);const tk=cols.find(k=>/(total|sum|ip)$/i.test(k))||cols[cols.length-1];const tv=tk?(+(t[tk]||0)).toFixed(1):'–';return`<div class="kfip-mini-row"><span class="kfip-dot"></span><span class="kfip-mini-ip">${esc(ip)}</span><span class="kfip-badge ${tp}">${tp==='dg'?'DG':'OVPN'}</span><span class="kfip-mini-trf">${tv!=='–'?tv+` GB (${period}T)`:'–'}</span></div>`;}).join(''):'<div class="kfip-mini-row" style="color:#7e8286;font-style:italic;">Keine Feste IPs</div>';}
 
-  function renderMini(entries){
-    document.getElementById('kfip-mini').innerHTML=entries.length?entries.map(e=>{
-      const ip=findIp(e.det)||findIp(e.ip)||'–';
-      const tp=normType((e.det||e.ip||{}).type);
-      const{cols,tot}=getTotals(e.trf);
-      const totK=cols.find(k=>/(total|sum|ip)$/i.test(k))||cols[cols.length-1];
-      const totV=totK?(+(tot[totK]||0)).toFixed(1):'–';
-      const{period}=getSettings();
-      return`<div class="kfip-mini-row"><span class="kfip-dot"></span><span class="kfip-mini-ip">${esc(ip)}</span><span class="kfip-badge ${tp}">${tp==='dg'?'DG':'OVPN'}</span><span class="kfip-mini-trf">${totV!=='–'?totV+` GB (${period}T)`:'–'}</span></div>`;
-    }).join(''):'<div class="kfip-mini-row" style="color:#7e8286;font-style:italic;">Keine Feste IPs</div>';
-  }
+  function renderDetail(e){const{period}=getSettings();document.getElementById('kfip-detail').innerHTML=e.map(x=>{const d=x.det||x.ip||{},ip=x.ip||{};const ipS=findIp(d)||findIp(ip)||'–';const tp=normType(d.type||ip.type);const id=String(findId(d)||findId(ip)||'–');const rdns=findField(d,['rdns','reverse_dns','ptr','hostname'])||'–';const wan=findField(d,['wan_ip','dg_wan_ip','dg_ipv4','wan'])||'–';const cid=String(findField(d,['customer_id','kundenid','kundennr','cid'])||'–');const{cols,t}=tot(x.trf);const th=cols.map(k=>`<div class="kfip-trf-cell"><span class="kfip-trf-n">${CL[k]||k.toUpperCase()}</span><span class="kfip-trf-v" style="color:${CC[k]||'#d9d9d9'}">${(+(t[k]||0)).toFixed(k==='icmp'?3:2)} GB</span></div>`).join('');return`<div class="kfip-ip-block"><div class="kfip-ip-title"><span class="kfip-dot"></span><span class="kfip-ip-addr">${esc(ipS)}</span><span class="kfip-badge ${tp}">${tp==='dg'?'DG-Gateway':'OpenVPN'}</span></div><div class="kfip-dgrid"><span class="kfip-dl">Feste-IP-ID</span><span class="kfip-dv">${esc(id)}</span><span class="kfip-dl">WAN-IP</span><span class="kfip-dv">${esc(wan)}</span><span class="kfip-dl">Reverse-DNS</span><span class="kfip-dv">${esc(rdns)}</span><span class="kfip-dl">Kunden-ID</span><span class="kfip-dv">${esc(cid)}</span><span class="kfip-dl">Status</span><span class="kfip-dv" style="color:#56b870;">Aktiv</span></div>${cols.length?`<div class="kfip-trf-hd">Traffic · ${period} Tage</div><div class="kfip-trf-grid">${th}</div>`:''}</div>`;}).join('');}
 
-  function renderDetail(entries){
-    const{period}=getSettings();
-    document.getElementById('kfip-detail').innerHTML=entries.map(e=>{
-      const d=e.det||e.ip||{};const ip=e.ip||{};
-      const ipS=findIp(d)||findIp(ip)||'–';
-      const tp=normType(d.type||ip.type);
-      const id=String(findId(d)||findId(ip)||'–');
-      const rdns=findField(d,['rdns','reverse_dns','ptr','hostname'])||'–';
-      const wan=findField(d,['wan_ip','dg_wan_ip','dg_ipv4','wan'])||'–';
-      const cid=String(findField(d,['customer_id','kundenid','kundennr','cid'])||'–');
-      const{cols,tot}=getTotals(e.trf);
-      const trfHtml=cols.map(k=>`<div class="kfip-trf-cell"><span class="kfip-trf-n">${COL_L[k]||k.toUpperCase()}</span><span class="kfip-trf-v" style="color:${COL_C[k]||'#d9d9d9'}">${(+(tot[k]||0)).toFixed(k==='icmp'?3:2)} GB</span></div>`).join('');
-      return`<div class="kfip-ip-block">
-        <div class="kfip-ip-title"><span class="kfip-dot"></span><span class="kfip-ip-addr">${esc(ipS)}</span><span class="kfip-badge ${tp}">${tp==='dg'?'DG-Gateway':'OpenVPN'}</span></div>
-        <div class="kfip-dgrid">
-          <span class="kfip-dl">Feste-IP-ID</span><span class="kfip-dv">${esc(id)}</span>
-          <span class="kfip-dl">WAN-IP</span><span class="kfip-dv">${esc(wan)}</span>
-          <span class="kfip-dl">Reverse-DNS</span><span class="kfip-dv">${esc(rdns)}</span>
-          <span class="kfip-dl">Kunden-ID</span><span class="kfip-dv">${esc(cid)}</span>
-          <span class="kfip-dl">Status</span><span class="kfip-dv" style="color:#56b870;">Aktiv</span>
-        </div>
-        ${cols.length?`<div class="kfip-trf-hd">Traffic · ${period} Tage</div><div class="kfip-trf-grid">${trfHtml}</div>`:''}
-      </div>`;
-    }).join('');
-  }
+  async function load(){try{data=await loadAll();renderMini(data);if(open)renderDetail(data);const ts=document.getElementById('kfip-ts');if(ts)ts.textContent='Stand: '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});const er=document.getElementById('kfip-err');if(er)er.textContent='';}catch(e){const m=document.getElementById('kfip-mini');if(m)m.innerHTML=`<div class="kfip-mini-row" style="color:#d45555;">✗ ${esc(e.message)}</div>`;}}
+  function startTimer(){clearInterval(timer);const{refresh}=getSettings();timer=setInterval(()=>{try{sessionStorage.removeItem(CACHE+'_7');sessionStorage.removeItem(CACHE+'_30');}catch(e){}load();},refresh*60*1000);}
+  function toggle(){open=!open;document.getElementById('kfip-body').style.display=open?'':'none';const a=document.getElementById('kfip-arrow');a.textContent=open?'▴ Details':'▾ Details';if(open&&data)renderDetail(data);}
 
-  // ── Laden & Timer ────────────────────────────────────────────────────────
-  async function load(){
-    try{
-      data=await loadAll();
-      renderMini(data);
-      if(open)renderDetail(data);
-      const ts=document.getElementById('kfip-ts');
-      if(ts)ts.textContent=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
-      const err=document.getElementById('kfip-err');
-      if(err)err.textContent='';
-    }catch(e){
-      document.getElementById('kfip-mini').innerHTML=`<div class="kfip-mini-row" style="color:#d45555;">✗ ${esc(e.message)}</div>`;
-      const err=document.getElementById('kfip-err');
-      if(err)err.textContent=e.message;
-    }
-  }
-
-  function startTimer(){
-    clearInterval(timer);
-    const{refresh}=getSettings();
-    timer=setInterval(()=>{
-      try{sessionStorage.removeItem(`${CACHE}_7`);sessionStorage.removeItem(`${CACHE}_30`);}catch(e){}
-      load();
-    },refresh*60*1000);
-  }
-
-  function toggle(){
-    open=!open;
-    document.getElementById('kfip-body').style.display=open?'':'none';
-    const arr=document.getElementById('kfip-arrow');
-    arr.classList.toggle('open',open);
-    arr.textContent=open?'▴':'▾';
-    if(open&&data)renderDetail(data);
-  }
-
-  applySettingsUI();
-  load();
-  startTimer();
+  applyUI();load();startTimer();
   return{toggle,toggleSettings,saveSetting,refresh:load};
-})();
+})(); }
 </script>
 <?php endif; ?>
+</td></tr>
+</tbody>
+<?php
+$mytiles['kossmann-festeip']['column2'] = ob_get_clean();
+?>
 
 ]]>
 </INLINE>
@@ -1245,7 +1114,7 @@ chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 cp "$CONFIG_DIR/kossmann-festeip-manager.plg" "/boot/config/plugins/kossmann-festeip-manager.plg" 2>/dev/null || true
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.3.3 installiert      ║"
+echo "║  Kossmann Feste IP Manager v0.3.4 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
@@ -1258,7 +1127,6 @@ echo ""
 #!/bin/bash
 rm -rf /usr/local/emhttp/plugins/kossmann-festeip-manager
 rm -f  /boot/config/plugins/kossmann-festeip-manager.plg
-# rm -rf /boot/config/plugins/kossmann-festeip-manager
 echo "Kossmann Feste IP Manager entfernt."
 ]]>
 </INLINE>
