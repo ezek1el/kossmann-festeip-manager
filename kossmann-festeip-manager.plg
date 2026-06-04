@@ -995,7 +995,6 @@ chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
 echo "║  Kossmann Feste IP Manager v0.1.6 installiert    ║"
-echo "║  Browser neu laden  →  Utilities → Kossmann        ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
