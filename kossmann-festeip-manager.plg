@@ -2,27 +2,24 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.3.7">
+  <!ENTITY version   "0.3.8">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;"
         icon="images/plugin-icon.png" min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.3.8
+- Fix: Dropdown-Menüs in Dashboard-Einstellungen kompakt (Refresh + Traffic nebeneinander)
+
 ##0.3.7
-- Dashboard: Icon + Buttons + Traffic in der Titelzeile
-- Fix: IP-Adresse nicht mehr doppelt
-- Grüne Punkte und DG/OVPN-Badges entfernt
-- Typ jetzt als Detailfeld statt Badge
+- Icon + Buttons + Traffic in Titelzeile, keine doppelte IP, keine Dots/Badges
 
 ##0.3.6
-- Native Unraid-Buttons, Weiß-Texte
+- Native Unraid-Buttons
 
-##0.3.5
-- Dashboard-Tile nach Unraid-Vorlage
-
-##0.2.0-0.3.4
-- Farbpalette, Icon, Dashboard-Iterationen
+##0.2.0-0.3.5
+- Farbpalette, Icon, Dashboard
 
 ##0.1.0-0.1.8
 - Initiales Release + Bugfixes
@@ -32,7 +29,7 @@
 <INLINE>
 <![CDATA[
 <?xml version='1.0' standalone='yes'?>
-<PLUGIN name="kossmann-festeip-manager" author="ezek1el3000" version="0.3.7" pluginURL="https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg" min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues"/>
+<PLUGIN name="kossmann-festeip-manager" author="ezek1el3000" version="0.3.8" pluginURL="https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg" min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues"/>
 ]]>
 </INLINE>
 </FILE>
@@ -46,7 +43,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.3.7';
+const KFIP_VER        = '0.3.8';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -1005,16 +1002,17 @@ if (!$kfip_configured):
 .kfip-trf-v{font-size:12px;font-weight:600;}
 .kfip-foot{display:flex;justify-content:space-between;align-items:center;margin-top:6px;}
 .kfip-foot .kfip-ts{font-size:11px;opacity:.45;}
-.kfip-sel{background:rgba(128,128,128,.15);border:1px solid rgba(128,128,128,.3);border-radius:3px;color:inherit;font-size:11px;padding:1px 3px;cursor:pointer;}
+.kfip-sel{background:rgba(128,128,128,.15);border:1px solid rgba(128,128,128,.3);border-radius:3px;color:inherit;font-size:11px;padding:1px 3px;cursor:pointer;width:auto;max-width:90px;}
+.kfip-settings-flex{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 </style>
 <div id="kfip-dc">
-  <div id="kfip-settings" style="display:none;margin-bottom:6px;font-size:11px;opacity:.85;">
-    Refresh:
+  <div id="kfip-settings" class="kfip-settings-flex" style="display:none;margin-bottom:6px;font-size:11px;opacity:.85;">
+    <span>Refresh:</span>
     <select class="kfip-sel" id="kfip-ref-sel" onchange="kfipDash.saveSetting('refresh',this.value)">
       <option value="5">5 Min</option><option value="15">15 Min</option>
       <option value="30">30 Min</option><option value="60">60 Min</option>
     </select>
-    Traffic:
+    <span style="margin-left:6px;">Traffic:</span>
     <select class="kfip-sel" id="kfip-per-sel" onchange="kfipDash.saveSetting('period',this.value)">
       <option value="7">7 Tage</option><option value="30">30 Tage</option>
     </select>
@@ -1116,7 +1114,7 @@ chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 cp "$CONFIG_DIR/kossmann-festeip-manager.plg" "/boot/config/plugins/kossmann-festeip-manager.plg" 2>/dev/null || true
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.3.7 installiert      ║"
+echo "║  Kossmann Feste IP Manager v0.3.8 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
