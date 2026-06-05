@@ -2,18 +2,23 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.4.6">
+  <!ENTITY version   "0.4.7">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;"
         icon="images/plugin-icon.png" min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.4.7
+- Dashboard: 24h-Option im Traffic-Dropdown
+- Traffic-Zeitraum berechnet jetzt echte Summen (letzte N Tage aus Tagesdaten), nicht nur Label
+- Cache period-unabhängig (kein Doppel-Fetch beim Umschalten)
+
 ##0.4.6
-- Dashboard: Detail-Schrift an native Unraid-Tiles angeglichen (Sans-Serif statt Monospace, hellere Labels)
+- Detail-Schrift wie native Tiles
 
 ##0.4.5
-- IP exakt unter Titel (einspaltiges Flexbox)
+- IP unter Titel (Flexbox)
 
 ##0.4.0-0.4.4
 - Update-Fix, Ausrichtung
@@ -37,7 +42,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.4.6';
+const KFIP_VER        = '0.4.7';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -1008,7 +1013,7 @@ if (!$kfip_configured):
     </select>
     <span style="margin-left:6px;">Traffic:</span>
     <select class="kfip-sel" id="kfip-per-sel" onchange="kfipDash.saveSetting('period',this.value)">
-      <option value="7">7 Tage</option><option value="30">30 Tage</option>
+      <option value="1">24h</option><option value="7">7 Tage</option><option value="30">30 Tage</option>
     </select>
   </div>
   <div id="kfip-mini"><div class="kfip-mini-row" style="opacity:.5;font-style:italic;">Lade&hellip;</div></div>
@@ -1027,7 +1032,7 @@ if (typeof window.kfipDash === 'undefined') { window.kfipDash = (() => {
   let open=false, settingsOpen=false, data=null, timer=null;
   function getSettings(){try{return Object.assign({refresh:15,period:7},JSON.parse(localStorage.getItem(SKEY)||'{}'));}catch(e){return{refresh:15,period:7};}}
   function applyUI(){const s=getSettings();const r=document.getElementById('kfip-ref-sel'),p=document.getElementById('kfip-per-sel');if(r)r.value=String(s.refresh);if(p)p.value=String(s.period);}
-  function saveSetting(k,v){const s=getSettings();s[k]=parseInt(v);localStorage.setItem(SKEY,JSON.stringify(s));clearInterval(timer);try{sessionStorage.removeItem(CACHE+'_7');sessionStorage.removeItem(CACHE+'_30');}catch(e){}load();startTimer();}
+  function saveSetting(k,v){const s=getSettings();s[k]=parseInt(v);localStorage.setItem(SKEY,JSON.stringify(s));clearInterval(timer);load();startTimer();}
   function toggleSettings(){settingsOpen=!settingsOpen;document.getElementById('kfip-settings').style.display=settingsOpen?'':'none';if(settingsOpen)applyUI();}
   function esc(s){const d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
   function findId(o){if(!o)return null;if(o.id!=null&&o.id!=='')return o.id;for(const[k,v]of Object.entries(o)){if(/(^|_)id($|_)/i.test(k)&&(typeof v==='number'||(typeof v==='string'&&v!=='')))return v;}return null;}
@@ -1036,7 +1041,7 @@ if (typeof window.kfipDash === 'undefined') { window.kfipDash = (() => {
   function normType(t){return(!t||/dg|gate/i.test(String(t)))?'DG-Gateway':'OpenVPN';}
   async function call(p){const r=await fetch(API+'?api=1&'+new URLSearchParams(p));const t=await r.text();if(!t.trim())throw new Error('HTTP '+r.status);return JSON.parse(t);}
   async function loadAll(){
-    const s=getSettings();const ck=CACHE+'_'+s.period;const ttl=s.refresh*60*1000;
+    const s=getSettings();const ck=CACHE;const ttl=s.refresh*60*1000;
     try{const c=JSON.parse(sessionStorage.getItem(ck)||'null');if(c&&Date.now()-c.ts<ttl)return c.data;}catch(e){}
     const list=await call({action:'list'});
     const ips=Array.isArray(list.data)?list.data:(Array.isArray(list)?list:[]);
@@ -1046,10 +1051,11 @@ if (typeof window.kfipDash === 'undefined') { window.kfipDash = (() => {
   }
   const CL={tcp:'TCP',udp:'UDP',icmp:'ICMP',ip:'IP',total:'Gesamt',sum:'Gesamt'};
   const CC={tcp:'#1d9ac7',udp:'#e69b1e',icmp:'inherit',ip:'inherit',total:'#56b870',sum:'#56b870'};
-  function tot(trf){if(!trf)return{cols:[],t:{}};const t=trf.totals||{};const cols=Object.keys(t).filter(k=>typeof t[k]==='number'||(typeof t[k]==='string'&&!isNaN(+t[k])&&t[k]!==''));return{cols,t};}
-  function trafSum(x){const r=tot(x.trf);const tk=r.cols.find(k=>/(total|sum|ip)$/i.test(k))||r.cols[r.cols.length-1];return tk?+(r.t[tk]||0):0;}
+  function tot(trf,days){if(!trf)return{cols:[],t:{}};const isD=k=>/date|datum|day|time|ts/i.test(k);const data=Array.isArray(trf.data)?trf.data.slice():[];if(days&&days<30&&data.length){const dk=Object.keys(data[0]).find(isD);if(dk)data.sort((a,b)=>String(b[dk]).localeCompare(String(a[dk])));const sum={};data.slice(0,days).forEach(row=>Object.keys(row).forEach(k=>{if(!isD(k)&&(typeof row[k]==='number'||(typeof row[k]==='string'&&row[k]!==''&&!isNaN(+row[k]))))sum[k]=(sum[k]||0)+(+row[k]||0);}));return{cols:Object.keys(sum),t:sum};}const t=trf.totals||{};const cols=Object.keys(t).filter(k=>typeof t[k]==='number'||(typeof t[k]==='string'&&!isNaN(+t[k])&&t[k]!==''));return{cols,t};}
+  function trafSum(x,days){const r=tot(x.trf,days);const tk=r.cols.find(k=>/(total|sum|ip)$/i.test(k))||r.cols[r.cols.length-1];return tk?+(r.t[tk]||0):0;}
 
-  function renderHeaderTrf(e){const s=getSettings();let sum=0;e.forEach(x=>sum+=trafSum(x));const el=document.getElementById('kfip-hdr-trf');if(el)el.textContent=e.length?sum.toFixed(1)+' GB ('+s.period+'T)':'';}
+  function perLabel(p){return p==1?'24h':p+'T';}
+  function renderHeaderTrf(e){const s=getSettings();let sum=0;e.forEach(x=>sum+=trafSum(x,s.period));const el=document.getElementById('kfip-hdr-trf');if(el)el.textContent=e.length?sum.toFixed(1)+' GB ('+perLabel(s.period)+')':'';}
 
   function renderMini(e){
     document.getElementById('kfip-mini').innerHTML=e.length?e.map(x=>{
@@ -1058,9 +1064,9 @@ if (typeof window.kfipDash === 'undefined') { window.kfipDash = (() => {
     }).join(''):'<div class="kfip-mini-row" style="opacity:.5;font-style:italic;">Keine Feste IPs</div>';
     renderHeaderTrf(e);
   }
-  function renderDetail(e){const s=getSettings();const multi=e.length>1;document.getElementById('kfip-detail').innerHTML=e.map(x=>{const d=x.det||x.ip||{},ip=x.ip||{};const ipS=findIp(d)||findIp(ip)||'-';const tp=normType(d.type||ip.type);const id=String(findId(d)||findId(ip)||'-');const rdns=findField(d,['rdns','reverse_dns','ptr','hostname'])||'-';const wan=findField(d,['wan_ip','dg_wan_ip','dg_ipv4','wan'])||'-';const cid=String(findField(d,['customer_id','kundenid','kundennr','cid'])||'-');const r=tot(x.trf);const th=r.cols.map(k=>'<div class="kfip-trf-cell"><span class="kfip-trf-n">'+(CL[k]||k.toUpperCase())+'</span><span class="kfip-trf-v" style="color:'+(CC[k]||'inherit')+'">'+(+(r.t[k]||0)).toFixed(k==='icmp'?3:2)+' GB</span></div>').join('');return'<div class="kfip-ip-block">'+(multi?'<div class="kfip-ip-lbl">'+esc(ipS)+'</div>':'')+'<div class="kfip-dgrid"><span class="kfip-dl">Typ</span><span class="kfip-dv">'+tp+'</span><span class="kfip-dl">Feste-IP-ID</span><span class="kfip-dv">'+esc(id)+'</span><span class="kfip-dl">WAN-IP</span><span class="kfip-dv">'+esc(wan)+'</span><span class="kfip-dl">Reverse-DNS</span><span class="kfip-dv">'+esc(rdns)+'</span><span class="kfip-dl">Kunden-ID</span><span class="kfip-dv">'+esc(cid)+'</span><span class="kfip-dl">Status</span><span class="kfip-dv" style="color:#56b870;">Aktiv</span></div>'+(r.cols.length?'<div class="kfip-trf-hd">Traffic - '+s.period+' Tage</div><div class="kfip-trf-grid">'+th+'</div>':'')+'</div>';}).join('');}
+  function renderDetail(e){const s=getSettings();const multi=e.length>1;document.getElementById('kfip-detail').innerHTML=e.map(x=>{const d=x.det||x.ip||{},ip=x.ip||{};const ipS=findIp(d)||findIp(ip)||'-';const tp=normType(d.type||ip.type);const id=String(findId(d)||findId(ip)||'-');const rdns=findField(d,['rdns','reverse_dns','ptr','hostname'])||'-';const wan=findField(d,['wan_ip','dg_wan_ip','dg_ipv4','wan'])||'-';const cid=String(findField(d,['customer_id','kundenid','kundennr','cid'])||'-');const r=tot(x.trf,s.period);const th=r.cols.map(k=>'<div class="kfip-trf-cell"><span class="kfip-trf-n">'+(CL[k]||k.toUpperCase())+'</span><span class="kfip-trf-v" style="color:'+(CC[k]||'inherit')+'">'+(+(r.t[k]||0)).toFixed(k==='icmp'?3:2)+' GB</span></div>').join('');return'<div class="kfip-ip-block">'+(multi?'<div class="kfip-ip-lbl">'+esc(ipS)+'</div>':'')+'<div class="kfip-dgrid"><span class="kfip-dl">Typ</span><span class="kfip-dv">'+tp+'</span><span class="kfip-dl">Feste-IP-ID</span><span class="kfip-dv">'+esc(id)+'</span><span class="kfip-dl">WAN-IP</span><span class="kfip-dv">'+esc(wan)+'</span><span class="kfip-dl">Reverse-DNS</span><span class="kfip-dv">'+esc(rdns)+'</span><span class="kfip-dl">Kunden-ID</span><span class="kfip-dv">'+esc(cid)+'</span><span class="kfip-dl">Status</span><span class="kfip-dv" style="color:#56b870;">Aktiv</span></div>'+(r.cols.length?'<div class="kfip-trf-hd">Traffic - '+(s.period==1?'24h':s.period+' Tage')+'</div><div class="kfip-trf-grid">'+th+'</div>':'')+'</div>';}).join('');}
   async function load(){try{data=await loadAll();renderMini(data);if(open)renderDetail(data);const ts=document.getElementById('kfip-ts');if(ts)ts.textContent='Stand: '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});}catch(e){const m=document.getElementById('kfip-mini');if(m)m.innerHTML='<div class="kfip-mini-row" style="color:#d45555;">x '+esc(e.message)+'</div>';}}
-  function startTimer(){clearInterval(timer);const s=getSettings();timer=setInterval(function(){try{sessionStorage.removeItem(CACHE+'_7');sessionStorage.removeItem(CACHE+'_30');}catch(e){}load();},s.refresh*60*1000);}
+  function startTimer(){clearInterval(timer);const s=getSettings();timer=setInterval(function(){try{sessionStorage.removeItem(CACHE);}catch(e){}load();},s.refresh*60*1000);}
   function toggle(){open=!open;document.getElementById('kfip-body').style.display=open?'':'none';const a=document.getElementById('kfip-arrow');if(a){a.classList.toggle('fa-chevron-down',!open);a.classList.toggle('fa-chevron-up',open);}if(open&&data)renderDetail(data);}
   applyUI();load();startTimer();
   return{toggle:toggle,toggleSettings:toggleSettings,saveSetting:saveSetting,refresh:load};
@@ -1112,7 +1118,7 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAqTUlEQVR4nO3deZRdVbXv8XnS0Q
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.4.6 installiert      ║"
+echo "║  Kossmann Feste IP Manager v0.4.7 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
