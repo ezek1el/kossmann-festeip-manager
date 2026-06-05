@@ -2,19 +2,21 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.4.5">
+  <!ENTITY version   "0.4.6">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;"
         icon="images/plugin-icon.png" min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.4.6
+- Dashboard: Detail-Schrift an native Unraid-Tiles angeglichen (Sans-Serif statt Monospace, hellere Labels)
+
 ##0.4.5
-- Fix: IP exakt unter Titel – einspaltiges Flexbox-Layout (Titel und IP in derselben Spalte)
-- Icon links daneben, kein rowspan, kein Spacer, keine Pixel-Schätzung
+- IP exakt unter Titel (einspaltiges Flexbox)
 
 ##0.4.0-0.4.4
-- Update-Fix, Ausrichtungs-Iterationen
+- Update-Fix, Ausrichtung
 
 ##0.3.0-0.3.9
 - Dashboard-Karte, native Optik
@@ -35,7 +37,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.4.5';
+const KFIP_VER        = '0.4.6';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -984,13 +986,13 @@ if (!$kfip_configured):
 .kfip-ip-block{padding:2px 0 6px;border-bottom:1px solid rgba(128,128,128,.2);margin-bottom:6px;}
 .kfip-ip-block:last-of-type{border-bottom:none;margin-bottom:0;}
 .kfip-ip-lbl{font-family:monospace;opacity:.5;font-size:11px;margin-bottom:4px;}
-.kfip-dgrid{display:grid;grid-template-columns:100px 1fr;gap:2px 8px;margin-bottom:6px;}
-.kfip-dl{opacity:.55;font-size:11px;}
-.kfip-dv{font-family:monospace;font-size:12px;word-break:break-all;}
-.kfip-trf-hd{opacity:.55;font-size:11px;margin:4px 0;}
+.kfip-dgrid{display:grid;grid-template-columns:110px 1fr;gap:4px 8px;margin-bottom:8px;}
+.kfip-dl{opacity:.7;font-size:13px;}
+.kfip-dv{font-size:13px;word-break:break-all;}
+.kfip-trf-hd{opacity:.7;font-size:12px;margin:6px 0 4px;}
 .kfip-trf-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:3px;}
 .kfip-trf-cell{background:rgba(128,128,128,.1);border-radius:3px;padding:3px 6px;display:flex;justify-content:space-between;}
-.kfip-trf-n{opacity:.55;font-size:11px;}
+.kfip-trf-n{opacity:.7;font-size:12px;}
 .kfip-trf-v{font-size:12px;font-weight:600;}
 .kfip-foot{display:flex;justify-content:space-between;align-items:center;margin-top:6px;}
 .kfip-foot .kfip-ts{font-size:11px;opacity:.45;}
@@ -1110,7 +1112,7 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAqTUlEQVR4nO3deZRdVbXv8XnS0Q
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.4.5 installiert      ║"
+echo "║  Kossmann Feste IP Manager v0.4.6 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
