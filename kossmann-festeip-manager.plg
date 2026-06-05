@@ -2,21 +2,24 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.4.0">
+  <!ENTITY version   "0.4.2">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;"
         icon="images/plugin-icon.png" min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
+##0.4.2
+- Dashboard: Typ (DG-Gateway) aus der eingeklappten Mini-Zeile entfernt – nur noch IP
+
+##0.4.1
+- IP-Adresse kompakt unter der Überschrift
+
 ##0.4.0
-- Fix: Update-Mechanismus repariert – Stub-Datei entfernt
-  Die volle .plg bleibt jetzt von Unraid verwaltet (wie native Plugins),
-  dadurch werden bei Updates alle Dateien korrekt ersetzt
-- Dashboard-Icon 32x32 (kommt jetzt durch)
+- Fix: Update-Mechanismus repariert
 
 ##0.3.0-0.3.9
-- Dashboard-Karte, native Optik, Einstellungen
+- Dashboard-Karte, native Optik
 
 ##0.2.0
 - Farbpalette Unraid, Icon Globus+K
@@ -34,7 +37,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.4.0';
+const KFIP_VER        = '0.4.2';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -976,7 +979,8 @@ if (!$kfip_configured):
 <?php else: ?>
 <style>
 #kfip-dc{font-size:13px;}
-.kfip-mini-row{display:flex;align-items:center;gap:8px;padding:2px 0;}
+#kfip-mini{margin-top:-2px;}
+.kfip-mini-row{display:flex;align-items:center;gap:8px;padding:0 0 2px;}
 .kfip-mini-ip{font-family:monospace;font-weight:700;}
 .kfip-mini-typ{opacity:.55;font-size:11px;}
 .kfip-body{margin-top:6px;border-top:1px solid rgba(128,128,128,.2);padding-top:6px;}
@@ -1051,8 +1055,7 @@ if (typeof window.kfipDash === 'undefined') { window.kfipDash = (() => {
   function renderMini(e){
     document.getElementById('kfip-mini').innerHTML=e.length?e.map(x=>{
       const ip=findIp(x.det)||findIp(x.ip)||'-';
-      const tp=normType((x.det||x.ip||{}).type);
-      return'<div class="kfip-mini-row"><span class="kfip-mini-ip">'+esc(ip)+'</span><span class="kfip-mini-typ">'+tp+'</span></div>';
+      return'<div class="kfip-mini-row"><span class="kfip-mini-ip">'+esc(ip)+'</span></div>';
     }).join(''):'<div class="kfip-mini-row" style="opacity:.5;font-style:italic;">Keine Feste IPs</div>';
     renderHeaderTrf(e);
   }
@@ -1104,7 +1107,7 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAqTUlEQVR4nO3deZRdVbXv8XnS0Q
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.4.0 installiert      ║"
+echo "║  Kossmann Feste IP Manager v0.4.2 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
