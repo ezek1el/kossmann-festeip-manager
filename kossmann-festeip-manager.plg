@@ -2,22 +2,19 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "kossmann-festeip-manager">
   <!ENTITY author    "ezek1el3000">
-  <!ENTITY version   "0.4.4">
+  <!ENTITY version   "0.4.5">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/main/kossmann-festeip-manager.plg">
 ]>
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;"
         icon="images/plugin-icon.png" min="6.12" support="https://github.com/ezek1el/kossmann-festeip-manager/issues">
 
 <CHANGES>
-##0.4.4
-- Fix: rowspan zurückgenommen (zerschoss Layout), Icon wieder inline
-- IP rückt via Content-Einzug unter den Titel
+##0.4.5
+- Fix: IP exakt unter Titel – einspaltiges Flexbox-Layout (Titel und IP in derselben Spalte)
+- Icon links daneben, kein rowspan, kein Spacer, keine Pixel-Schätzung
 
-##0.4.3
-- (rowspan-Versuch, fehlerhaft)
-
-##0.4.0-0.4.2
-- Update-Fix, Mini-Zeile, Typ entfernt
+##0.4.0-0.4.4
+- Update-Fix, Ausrichtungs-Iterationen
 
 ##0.3.0-0.3.9
 - Dashboard-Karte, native Optik
@@ -38,7 +35,7 @@
 //  Standalone PHP/Vanilla-JS · Server-seitiger API-Proxy
 // ══════════════════════════════════════════════════════════════════════════════
 
-const KFIP_VER        = '0.4.4';
+const KFIP_VER        = '0.4.5';
 const KFIP_CONFIG_DIR = '/boot/config/plugins/kossmann-festeip-manager';
 const KFIP_CONFIG     = KFIP_CONFIG_DIR . '/config.json';
 
@@ -1075,15 +1072,21 @@ $pluginname = "kossmann-festeip";
 $mytiles[$pluginname]['column2'] =
 '<tbody title="Kossmann Feste IP">
 <tr><td>'
-. '<img src="' . $kfip_icon . '" style="height:32px;width:32px;vertical-align:middle;margin-right:9px;border-radius:4px;">'
-. 'Kossmann Feste IP'
-. '<span style="float:right;font-weight:normal;display:inline-flex;align-items:center;gap:8px;">'
-.   '<span id="kfip-hdr-trf" style="opacity:.7;font-size:12px;"></span>'
-.   '<i class="fa fa-fw fa-cog control" style="cursor:pointer;" title="Einstellungen" onclick="kfipDash.toggleSettings()"></i>'
-.   '<i class="fa fa-fw fa-chevron-down control" id="kfip-arrow" style="cursor:pointer;" title="Details" onclick="kfipDash.toggle()"></i>'
-. '</span>'
+. '<div style="display:flex;align-items:flex-start;gap:9px;font-weight:normal;">'
+.   '<img src="' . $kfip_icon . '" style="height:32px;width:32px;border-radius:4px;flex-shrink:0;">'
+.   '<div style="flex:1;min-width:0;">'
+.     '<div style="font-weight:bold;line-height:32px;">'
+.       'Kossmann Feste IP'
+.       '<span style="float:right;font-weight:normal;display:inline-flex;align-items:center;gap:8px;line-height:normal;">'
+.         '<span id="kfip-hdr-trf" style="opacity:.7;font-size:12px;"></span>'
+.         '<i class="fa fa-fw fa-cog control" style="cursor:pointer;" title="Einstellungen" onclick="kfipDash.toggleSettings()"></i>'
+.         '<i class="fa fa-fw fa-chevron-down control" id="kfip-arrow" style="cursor:pointer;" title="Details" onclick="kfipDash.toggle()"></i>'
+.       '</span>'
+.     '</div>'
+.     $kfip_content
+.   '</div>'
+. '</div>'
 . '</td></tr>
-<tr><td style="padding-left:41px;">' . $kfip_content . '</td></tr>
 </tbody>';
 ?>
 
@@ -1107,7 +1110,7 @@ echo "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAqTUlEQVR4nO3deZRdVbXv8XnS0Q
 chmod 644 "$PLUGIN_DIR/images/plugin-icon.png"
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Kossmann Feste IP Manager v0.4.4 installiert      ║"
+echo "║  Kossmann Feste IP Manager v0.4.5 installiert      ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 ]]>
