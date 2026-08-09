@@ -21,40 +21,6 @@ Zugangsdaten werden ausschließlich serverseitig verwendet (PHP/cURL) und lokal 
 
 ---
 
-## Screenshots
-
-### Dashboard-Kachel
-
-Kompakte Übersicht direkt im Unraid-Dashboard — eingeklappt nur IP und Traffic, ausgeklappt alle Details samt Verkehrsstatistik. Refresh-Intervall und Zeitraum sind über das Zahnrad einstellbar.
-
-![Dashboard-Kachel](screenshots/screenshot1-dashboard-tile.png)
-
-### Übersicht
-
-Alle Feste IPs in der Seitenleiste, Details und Reverse-DNS-Verwaltung im Hauptbereich.
-
-![Übersicht](screenshots/screenshot2-settings-page.png)
-
-### Zugangsdaten
-
-Beim ersten Start werden Kunden-ID und API-Passwort abgefragt. Sie werden ausschließlich lokal auf dem Unraid-Server gespeichert.
-
-![Zugangsdaten](screenshots/screenshot3-login-screen.png)
-
-### Traffic
-
-Verkehrsdiagramm für 24 Stunden, 7 oder 30 Tage sowie die tagesweise Statistik nach Protokoll.
-
-![Traffic](screenshots/screenshot4-detail-statistics.png)
-
-### Tools
-
-Port-Scanner mit Schnellzugriff auf gängige Ports und die DG-WAN-IP-Aktualisierung.
-
-![Tools](screenshots/screenshot5-additional-tools.png)
-
----
-
 ## Installation
 
 1. In der Unraid-Weboberfläche: **Plugins → Install Plugin**
@@ -129,6 +95,40 @@ Die Quelldateien liegen unter `source/`. Änderungen am Plugin werden in die `.p
 - der Dateiname-unabhängige Changelog-Eintrag
 
 Versionsschema (Semver): Bugfixes → `0.4.x`, größere Änderungen → `0.x.0`.
+
+---
+
+## Screenshots
+
+### Dashboard-Kachel
+
+Kompakte Übersicht direkt im Unraid-Dashboard — eingeklappt nur IP und Traffic, ausgeklappt alle Details samt Verkehrsstatistik. Refresh-Intervall und Zeitraum sind über das Zahnrad einstellbar.
+
+![Dashboard-Kachel](screenshots/screenshot1-dashboard-tile.png)
+
+### Übersicht
+
+Alle Feste IPs in der Seitenleiste, Details und Reverse-DNS-Verwaltung im Hauptbereich.
+
+![Übersicht](screenshots/screenshot2-settings-page.png)
+
+### Zugangsdaten
+
+Beim ersten Start werden Kunden-ID und API-Passwort abgefragt. Sie werden ausschließlich lokal auf dem Unraid-Server gespeichert.
+
+![Zugangsdaten](screenshots/screenshot3-login-screen.png)
+
+### Traffic
+
+Verkehrsdiagramm für 24 Stunden, 7 oder 30 Tage sowie die tagesweise Statistik nach Protokoll.
+
+![Traffic](screenshots/screenshot4-detail-statistics.png)
+
+### Tools
+
+Port-Scanner mit Schnellzugriff auf gängige Ports und die DG-WAN-IP-Aktualisierung.
+
+![Tools](screenshots/screenshot5-additional-tools.png)
 
 ---
 
