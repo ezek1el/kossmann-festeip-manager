@@ -34,7 +34,7 @@ https://raw.githubusercontent.com/ezek1el/kossmann-festeip-manager/refs/heads/ma
 
 ### Erste Einrichtung
 
-- **⚙ Zugangsdaten** anklicken
+- ** Zugangsdaten** anklicken
 - Kunden-ID und API-Passwort eingeben
 - **Speichern** — die IP-Liste wird automatisch geladen
 
